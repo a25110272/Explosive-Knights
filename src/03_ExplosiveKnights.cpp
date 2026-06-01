@@ -14,41 +14,40 @@ class Personaje
 public:
     Personaje(sf::Vector2f position)
     {
-        if (!texturaFrente.loadFromFile("assets/images/rojo_frente.png"))
+        if (!textura.loadFromFile("assets/images/verde_spritesheet.png"))
         {
-            std::cout << "Error al cargar rojo_frente.png\n";
-        }
-
-        if (!texturaEspalda.loadFromFile("assets/images/rojo_espalda.png"))
-        {
-            std::cout << "Error al cargar rojo_espalda.png\n";
-        }
-
-        if (!texturaDerecha.loadFromFile("assets/images/rojo_derecha.png"))
-        {
-            std::cout << "Error al cargar rojo_derecha.png\n";
-        }
-
-        if (!texturaIzquierda.loadFromFile("assets/images/rojo_izquierda.png"))
-        {
-            std::cout << "Error al cargar rojo_izquierda.png\n";
+            std::cout << "Error: no se pudo cargar assets/images/verde_spritesheet.png" << std::endl;
         }
 
         direccion = ABAJO;
+
+        // CAMBIA ESTOS VALORES SEGÚN EL TAMAÑO DE CADA FRAME
+        // Ejemplo: si tu imagen mide 1610 x 840:
+        // frameWidth = 1610 / 7 = 230
+        // frameHeight = 840 / 4 = 210
+        frameWidth = 230;
+        frameHeight = 235;
+
+        // 7 frames por dirección:
+        // frame 0 = quieto
+        // frames 1 a 6 = caminando
         numFrames = 7;
 
-        sprite.setTexture(texturaFrente);
+        sprite.setTexture(textura);
 
-        // SPRITESHEET VERTICAL
-        frameWidth = texturaFrente.getSize().x;          // 724
-        frameHeight = texturaFrente.getSize().y / numFrames; // 2172 / 7
+        sprite.setTextureRect(sf::IntRect(
+            0,
+            0,
+            frameWidth,
+            frameHeight
+        ));
 
-        sprite.setTextureRect(sf::IntRect(0, 0, frameWidth, frameHeight));
-        sprite.setOrigin(frameWidth / 2.0f, frameHeight / 2.0f);
+        centrarSprite();
+
         sprite.setPosition(position);
 
-        // Ajusta esto si se ve muy grande o muy chico
-        sprite.setScale(0.50f, 0.50f);
+        // Cambia esto si se ve muy grande o muy pequeño
+        sprite.setScale(1.0f, 1.0f);
     }
 
     void move(float offsetX, float offsetY, Direccion nuevaDireccion)
@@ -60,92 +59,102 @@ public:
 
     void update()
     {
-        cambiarTextura();
+        bool estabaCaminando = caminandoAnterior;
 
         if (caminando)
         {
+            // Si acaba de empezar a caminar, entra directo al frame 1
+            // para no pasar por el frame quieto.
+            if (!estabaCaminando)
+            {
+                currentFrame = 1;
+                clock.restart();
+            }
+
             if (clock.getElapsedTime().asSeconds() >= frameTime)
             {
-                currentFrame = (currentFrame + 1) % numFrames;
+                currentFrame++;
 
-                // AQUÍ LEEMOS EN VERTICAL
-                sprite.setTextureRect(sf::IntRect(
-                    0,
-                    currentFrame * frameHeight,
-                    frameWidth,
-                    frameHeight
-                ));
+                // Caminando solo usa frames 1, 2, 3, 4, 5, 6.
+                // Nunca usa el frame 0 mientras se mueve.
+                if (currentFrame >= numFrames)
+                {
+                    currentFrame = 1;
+                }
 
                 clock.restart();
             }
         }
         else
         {
+            // Si no se mueve, usa frame quieto.
             currentFrame = 0;
-
-            // quieto = primer frame
-            sprite.setTextureRect(sf::IntRect(
-                0,
-                0,
-                frameWidth,
-                frameHeight
-            ));
+            clock.restart();
         }
 
+        int fila = obtenerFilaDireccion();
+
+        sprite.setTextureRect(sf::IntRect(
+            currentFrame * frameWidth,
+            fila * frameHeight,
+            frameWidth,
+            frameHeight
+        ));
+
+        centrarSprite();
+
+        caminandoAnterior = caminando;
         caminando = false;
     }
 
-    void draw(sf::RenderWindow &window)
+    void draw(sf::RenderWindow& window)
     {
         window.draw(sprite);
     }
 
 private:
     sf::Sprite sprite;
-    sf::Texture texturaFrente;
-    sf::Texture texturaEspalda;
-    sf::Texture texturaDerecha;
-    sf::Texture texturaIzquierda;
-
+    sf::Texture textura;
     sf::Clock clock;
 
     Direccion direccion;
+
     bool caminando = false;
+    bool caminandoAnterior = false;
 
     int currentFrame = 0;
     int numFrames = 7;
-    int frameWidth = 0;
-    int frameHeight = 0;
 
-    float frameTime = 0.03f;
+    int frameWidth = 240;
+    int frameHeight = 233;
 
-    void cambiarTextura()
+    // VELOCIDAD DE ANIMACIÓN
+    // Menor número = más rápido
+    // Mayor número = más lento
+    float frameTime = 0.10f;
+
+   int obtenerFilaDireccion()
+{
+    if (direccion == ABAJO)
     {
-        if (direccion == ABAJO)
-        {
-            sprite.setTexture(texturaFrente);
-            frameWidth = texturaFrente.getSize().x;
-            frameHeight = texturaFrente.getSize().y / numFrames;
-        }
-        else if (direccion == ARRIBA)
-        {
-            sprite.setTexture(texturaEspalda);
-            frameWidth = texturaEspalda.getSize().x;
-            frameHeight = texturaEspalda.getSize().y / numFrames;
-        }
-        else if (direccion == DERECHA)
-        {
-            sprite.setTexture(texturaDerecha);
-            frameWidth = texturaDerecha.getSize().x;
-            frameHeight = texturaDerecha.getSize().y / numFrames;
-        }
-        else if (direccion == IZQUIERDA)
-        {
-            sprite.setTexture(texturaIzquierda);
-            frameWidth = texturaIzquierda.getSize().x;
-            frameHeight = texturaIzquierda.getSize().y / numFrames;
-        }
+        return 0; // frente
+    }
+    else if (direccion == ARRIBA)
+    {
+        return 1; // espalda
+    }
+    else if (direccion == DERECHA)
+    {
+        return 3; // derecha
+    }
+    else
+    {
+        return 2; // izquierda
+    }
+}
 
+    void centrarSprite()
+    {
         sprite.setOrigin(frameWidth / 2.0f, frameHeight / 2.0f);
     }
 };
@@ -155,12 +164,14 @@ int main()
     sf::RenderWindow window(sf::VideoMode(800, 600), "Explosive-Knights");
     window.setFramerateLimit(60);
 
-    Personaje caballeroRojo(sf::Vector2f(400, 300));
-    float velocidad = 6.0f;
+    Personaje caballeroVerde(sf::Vector2f(400, 300));
+
+    float velocidad = 3.0f;
 
     while (window.isOpen())
     {
         sf::Event event;
+
         while (window.pollEvent(event))
         {
             if (event.type == sf::Event::Closed)
@@ -171,25 +182,27 @@ int main()
 
         if (sf::Keyboard::isKeyPressed(sf::Keyboard::W))
         {
-            caballeroRojo.move(0, -velocidad, ARRIBA);
+            caballeroVerde.move(0, -velocidad, ARRIBA);
         }
         else if (sf::Keyboard::isKeyPressed(sf::Keyboard::S))
         {
-            caballeroRojo.move(0, velocidad, ABAJO);
-        }
-        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::A))
-        {
-            caballeroRojo.move(-velocidad, 0, IZQUIERDA);
+            caballeroVerde.move(0, velocidad, ABAJO);
         }
         else if (sf::Keyboard::isKeyPressed(sf::Keyboard::D))
         {
-            caballeroRojo.move(velocidad, 0, DERECHA);
+            caballeroVerde.move(velocidad, 0, DERECHA);
+        }
+        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::A))
+        {
+            caballeroVerde.move(-velocidad, 0, IZQUIERDA);
         }
 
-        caballeroRojo.update();
+        caballeroVerde.update();
 
         window.clear(sf::Color(35, 35, 45));
-        caballeroRojo.draw(window);
+
+        caballeroVerde.draw(window);
+
         window.display();
     }
 
