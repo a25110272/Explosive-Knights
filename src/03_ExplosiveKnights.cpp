@@ -1,5 +1,6 @@
 #include <SFML/Graphics.hpp>
 #include <iostream>
+#include <box2d/box2d.h>
 
 enum Direccion
 {
@@ -8,6 +9,105 @@ enum Direccion
     DERECHA,
     IZQUIERDA
 };
+
+// ============== PHYSICS ENGINE (Box2D v3.0) ==============
+const float PIXELS_PER_METER = 30.0f;
+
+class PhysicsSpace
+{
+public:
+    PhysicsSpace()
+    {
+        // Crear mundo con configuración por defecto
+        b2WorldDef worldDef = b2DefaultWorldDef();
+        worldDef.gravity = {0.0f, 0.0f};  // Sin gravedad para vista top-down
+        
+        world = b2CreateWorld(&worldDef);
+    }
+
+    ~PhysicsSpace()
+    {
+        if (b2World_IsValid(world))
+        {
+            b2DestroyWorld(world);
+        }
+    }
+
+    b2WorldId getWorldId()
+    {
+        return world;
+    }
+
+    void step(float timeStep)
+    {
+        if (b2World_IsValid(world))
+        {
+            b2World_Step(world, timeStep, 4);  // 4 sub-steps
+        }
+    }
+
+    b2BodyId createDynamicBody(float x, float y, float width, float height)
+    {
+        if (!b2World_IsValid(world))
+        {
+            return b2_nullBodyId;
+        }
+
+        b2BodyDef bodyDef = b2DefaultBodyDef();
+        bodyDef.type = b2_dynamicBody;
+        bodyDef.position.x = x / PIXELS_PER_METER;
+        bodyDef.position.y = y / PIXELS_PER_METER;
+        bodyDef.fixedRotation = true;  // No rotar
+
+        b2BodyId bodyId = b2CreateBody(world, &bodyDef);
+
+        // Crear forma de caja
+        b2Polygon polygon = b2MakeBox(
+            (width / 2.0f) / PIXELS_PER_METER,
+            (height / 2.0f) / PIXELS_PER_METER
+        );
+
+        b2ShapeDef shapeDef = b2DefaultShapeDef();
+        shapeDef.density = 1.0f;
+        shapeDef.friction = 0.3f;
+
+        b2CreatePolygonShape(bodyId, &shapeDef, &polygon);
+
+        return bodyId;
+    }
+
+    b2BodyId createStaticBody(float x, float y, float width, float height)
+    {
+        if (!b2World_IsValid(world))
+        {
+            return b2_nullBodyId;
+        }
+
+        b2BodyDef bodyDef = b2DefaultBodyDef();
+        bodyDef.type = b2_staticBody;
+        bodyDef.position.x = x / PIXELS_PER_METER;
+        bodyDef.position.y = y / PIXELS_PER_METER;
+
+        b2BodyId bodyId = b2CreateBody(world, &bodyDef);
+
+        b2Polygon polygon = b2MakeBox(
+            (width / 2.0f) / PIXELS_PER_METER,
+            (height / 2.0f) / PIXELS_PER_METER
+        );
+
+        b2ShapeDef shapeDef = b2DefaultShapeDef();
+        shapeDef.density = 0.0f;
+
+        b2CreatePolygonShape(bodyId, &shapeDef, &polygon);
+
+        return bodyId;
+    }
+
+private:
+    b2WorldId world;
+};
+
+// ============== FIN PHYSICS ENGINE (Box2D v3.0) ==============
 
 class Personaje
 {
@@ -55,6 +155,32 @@ public:
         sprite.move(offsetX, offsetY);
         direccion = nuevaDireccion;
         caminando = true;
+    }
+
+    void setPhysicsPosition(float x, float y)
+    {
+        sprite.setPosition(x, y);
+    }
+
+    void detenerAnimacion(Direccion dir)
+    {
+        // Detiene la animación y muestra el frame de reposo (frame 0)
+        direccion = dir;
+        currentFrame = 0;
+        caminando = false;
+        caminandoAnterior = false;
+        clock.restart();
+
+        // Actualizar TextureRect al frame 0 de la dirección especificada
+        int fila = obtenerFilaDireccion();
+        sprite.setTextureRect(sf::IntRect(
+            0,  // Frame 0 (reposo)
+            fila * frameHeight,
+            frameWidth,
+            frameHeight
+        ));
+
+        centrarSprite();
     }
 
     void update()
@@ -159,14 +285,122 @@ private:
     }
 };
 
+// ============== KNIGHT (JUGADOR) - Box2D v3.0 ==============
+class Knight
+{
+public:
+    Knight(sf::Vector2f position, PhysicsSpace& physics)
+        : personaje(position), physicsSpace(physics)
+    {
+        // Crear cuerpo dinámico en Box2D v3.0
+        bodyId = physicsSpace.createDynamicBody(
+            position.x, 
+            position.y, 
+            100.0f,  // ancho del hitbox
+            120.0f   // alto del hitbox
+        );
+    }
+
+    void handleInput()
+    {
+        // Velocidad: 10.0f m/s = 300 píxeles/seg a 60 FPS = 5 píxeles/frame
+        const float speed = 10.0f;
+        
+        b2Vec2 velocity = {0.0f, 0.0f};
+        Direccion dirActual = direccionActual;
+        bool seMovio = false;
+
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::W))
+        {
+            velocity.y = -speed;
+            dirActual = ARRIBA;
+            seMovio = true;
+        }
+        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::S))
+        {
+            velocity.y = speed;
+            dirActual = ABAJO;
+            seMovio = true;
+        }
+        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::D))
+        {
+            velocity.x = speed;
+            dirActual = DERECHA;
+            seMovio = true;
+        }
+        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::A))
+        {
+            velocity.x = -speed;
+            dirActual = IZQUIERDA;
+            seMovio = true;
+        }
+
+        // SOLO actualizar dirección y animación
+        // NO mover manualmente (eso lo hace Box2D)
+        if (seMovio)
+        {
+            personaje.move(0, 0, dirActual);
+            direccionActual = dirActual;
+        }
+        else
+        {
+            // Detener animación: mostrar frame de reposo
+            personaje.detenerAnimacion(direccionActual);
+        }
+
+        // DELEGAR movimiento 100% a Box2D v3.0
+        if (b2Body_IsValid(bodyId))
+        {
+            b2Body_SetLinearVelocity(bodyId, velocity);
+        }
+    }
+
+    void syncWithPhysics()
+    {
+        // Sincronizar posición del sprite con el cuerpo Box2D
+        if (b2Body_IsValid(bodyId))
+        {
+            b2Vec2 pos = b2Body_GetPosition(bodyId);
+            float pixelX = pos.x * PIXELS_PER_METER;
+            float pixelY = pos.y * PIXELS_PER_METER;
+            
+            personaje.setPhysicsPosition(pixelX, pixelY);
+        }
+    }
+
+    void update()
+    {
+        personaje.update();
+    }
+
+    void draw(sf::RenderWindow& window)
+    {
+        personaje.draw(window);
+    }
+
+    b2BodyId getBodyId() { return bodyId; }
+
+private:
+    Personaje personaje;
+    b2BodyId bodyId;
+    PhysicsSpace& physicsSpace;
+    Direccion direccionActual = ABAJO;
+};
+
+// ============== FIN KNIGHT - Box2D v3.0 ==============
+
 int main()
 {
     sf::RenderWindow window(sf::VideoMode(800, 600), "Explosive-Knights");
     window.setFramerateLimit(60);
 
-    Personaje caballeroVerde(sf::Vector2f(400, 300));
+    // Instanciar Physics Engine
+    PhysicsSpace physics;
 
-    float velocidad = 3.0f;
+    // Instanciar Knight (jugador)
+    Knight knight(sf::Vector2f(400, 300), physics);
+
+    const float timeStep = 1.0f / 60.0f;  // 60 FPS
 
     while (window.isOpen())
     {
@@ -180,29 +414,21 @@ int main()
             }
         }
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::W))
-        {
-            caballeroVerde.move(0, -velocidad, ARRIBA);
-        }
-        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::S))
-        {
-            caballeroVerde.move(0, velocidad, ABAJO);
-        }
-        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::D))
-        {
-            caballeroVerde.move(velocidad, 0, DERECHA);
-        }
-        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::A))
-        {
-            caballeroVerde.move(-velocidad, 0, IZQUIERDA);
-        }
+        // INPUT
+        knight.handleInput();
 
-        caballeroVerde.update();
+        // PHYSICS STEP (Box2D v3.0)
+        physics.step(timeStep);
 
+        // SYNC GRAPHICS WITH PHYSICS
+        knight.syncWithPhysics();
+
+        // UPDATE SPRITES
+        knight.update();
+
+        // RENDER
         window.clear(sf::Color(35, 35, 45));
-
-        caballeroVerde.draw(window);
-
+        knight.draw(window);
         window.display();
     }
 
