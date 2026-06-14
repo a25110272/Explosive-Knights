@@ -32,7 +32,7 @@ const float WALL_HITBOX_SIZE = 56.0f;
 const float KNIGHT_HITBOX_SIZE = 40.0f;
 const float KNIGHT_COLLISION_RADIUS = 31.0f;
 const float KNIGHT_DAMAGE_HITBOX_SIZE = 32.0f;
-const float FIRE_DAMAGE_MARGIN = 10.0f;
+const float FIRE_DAMAGE_MARGIN = 4.0f;
 const float ENEMY_HITBOX_SIZE = 36.0f;
 const uint32_t COLLISION_DEFAULT = 0x0001;
 const uint32_t COLLISION_PLAYER = 0x0002;
@@ -426,7 +426,7 @@ public:
                 break;
 
             int tipo = mapa.obtenerTipoCelda(fila, col);
-            if (tipo == Mapa::INDESTRUCTIBLE)
+            if (tipo == Mapa::INDESTRUCTIBLE || tipo == Mapa::DESTRUYENDOSE)
                 break;  // El fuego no pasa
 
             if (tipo == Mapa::DESTRUCTIBLE)
@@ -452,7 +452,7 @@ public:
                 break;
 
             int tipo = mapa.obtenerTipoCelda(fila, col);
-            if (tipo == Mapa::INDESTRUCTIBLE)
+            if (tipo == Mapa::INDESTRUCTIBLE || tipo == Mapa::DESTRUYENDOSE)
                 break;
 
             if (tipo == Mapa::DESTRUCTIBLE)
@@ -478,7 +478,7 @@ public:
                 break;
 
             int tipo = mapa.obtenerTipoCelda(fila, col);
-            if (tipo == Mapa::INDESTRUCTIBLE)
+            if (tipo == Mapa::INDESTRUCTIBLE || tipo == Mapa::DESTRUYENDOSE)
                 break;
 
             if (tipo == Mapa::DESTRUCTIBLE)
@@ -504,7 +504,7 @@ public:
                 break;
 
             int tipo = mapa.obtenerTipoCelda(fila, col);
-            if (tipo == Mapa::INDESTRUCTIBLE)
+            if (tipo == Mapa::INDESTRUCTIBLE || tipo == Mapa::DESTRUYENDOSE)
                 break;
 
             if (tipo == Mapa::DESTRUCTIBLE)
@@ -1456,6 +1456,8 @@ int main()
         {
             explosion.update();
         }
+
+        mapa.update(timeStep);
 
         // Eliminar explosiones inactivas
         auto it_exp = listaExplosiones.begin();

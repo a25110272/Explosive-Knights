@@ -4,6 +4,8 @@
 #include <ctime>
 #include <iostream>
 
+const float TIEMPO_DESTRUCCION_BLOQUE = 0.55f;
+
 Mapa::Mapa()
     : objetosMapaCargados(false), mapaBaseCargado(false)
 {
@@ -37,6 +39,8 @@ Mapa::~Mapa()
 
 void Mapa::inicializarGrid()
 {
+    bloquesEnDestruccion.clear();
+
     for (int i = 0; i < 13; i++)
     {
         for (int j = 0; j < 15; j++)
@@ -74,7 +78,7 @@ void Mapa::generarFisicas(PhysicsSpace& physics)
     {
         for (int j = 0; j < 15; j++)
         {
-            if (grid[i][j] == INDESTRUCTIBLE || grid[i][j] == DESTRUCTIBLE)
+            if (grid[i][j] == INDESTRUCTIBLE || grid[i][j] == DESTRUCTIBLE || grid[i][j] == DESTRUYENDOSE)
             {
                 float posX = j * 64.0f + 32.0f;
                 float posY = i * 64.0f + 32.0f;
@@ -120,7 +124,7 @@ void Mapa::draw(sf::RenderWindow& window)
                 {
                     celda.setFillColor(sf::Color(80, 80, 80));
                 }
-                else if (grid[i][j] == DESTRUCTIBLE)
+                else if (grid[i][j] == DESTRUCTIBLE || grid[i][j] == DESTRUYENDOSE)
                 {
                     celda.setFillColor(sf::Color(139, 90, 43));
                 }
@@ -151,28 +155,47 @@ void Mapa::destruirBloque(int fila, int columna, std::vector<PowerUp>* pItems)
 
     if (grid[fila][columna] == DESTRUCTIBLE)
     {
-        grid[fila][columna] = VACIO;
+        grid[fila][columna] = DESTRUYENDOSE;
+        bloquesEnDestruccion.push_back({fila, columna, TIEMPO_DESTRUCCION_BLOQUE, pItems});
+    }
+}
 
-        if (pItems != nullptr)
+void Mapa::update(float deltaTime)
+{
+    auto bloque = bloquesEnDestruccion.begin();
+    while (bloque != bloquesEnDestruccion.end())
+    {
+        bloque->tiempoRestante -= deltaTime;
+        if (bloque->tiempoRestante > 0.0f)
+        {
+            ++bloque;
+            continue;
+        }
+
+        grid[bloque->fila][bloque->columna] = VACIO;
+
+        if (bloque->pItems != nullptr)
         {
             int aleatorio = rand() % 100;
             if (aleatorio < 30)
             {
-                PowerUp nuevoItem(fila, columna);
-                pItems->push_back(nuevoItem);
+                PowerUp nuevoItem(bloque->fila, bloque->columna);
+                bloque->pItems->push_back(nuevoItem);
             }
         }
 
-        auto it = bodiesMap.find({fila, columna});
-        if (it != bodiesMap.end())
+        auto cuerpo = bodiesMap.find({bloque->fila, bloque->columna});
+        if (cuerpo != bodiesMap.end())
         {
-            b2BodyId bodyId = it->second;
+            b2BodyId bodyId = cuerpo->second;
             if (b2Body_IsValid(bodyId))
             {
                 b2DestroyBody(bodyId);
             }
-            bodiesMap.erase(it);
+            bodiesMap.erase(cuerpo);
         }
+
+        bloque = bloquesEnDestruccion.erase(bloque);
     }
 }
 
@@ -198,6 +221,7 @@ void Mapa::limpiarFisicas()
     }
 
     bodiesMap.clear();
+    bloquesEnDestruccion.clear();
 }
 
 void Mapa::calcularRectsObjetos(const sf::Image& imagen)
@@ -258,7 +282,7 @@ int Mapa::obtenerFilaTema(int fila, int columna) const
 
 int Mapa::obtenerColumnaObjeto(int fila, int columna, int tipo) const
 {
-    if (tipo == DESTRUCTIBLE)
+    if (tipo == DESTRUCTIBLE || tipo == DESTRUYENDOSE)
     {
         const int opcionesDestructibles[5] = {1, 2, 4, 7, 8};
         return opcionesDestructibles[(fila * 3 + columna * 5) % 5];
