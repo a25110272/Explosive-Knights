@@ -4,8 +4,6 @@
 #include <box2d/box2d.h>
 #include <vector>
 #include <map>
-#include <string>
-#include <algorithm>
 #include <cstdlib>
 #include <ctime>
 
@@ -20,17 +18,9 @@ enum Direccion
 // Estados del juego (FASE 5)
 enum EstadoJuego
 {
-    MENU,
-    SELECCION_PERSONAJE,
     JUGANDO,
     GAME_OVER,
     VICTORIA
-};
-
-enum ModoJuego
-{
-    ARCADE,
-    MULTIJUGADOR
 };
 
 // ============== PHYSICS ENGINE (Box2D v3.0) ==============
@@ -138,7 +128,7 @@ class PowerUp;
 class Personaje
 {
 public:
-    Personaje(sf::Vector2f position, const std::string& texturePath = "assets/images/verde_spritesheet.png")
+    Personaje(sf::Vector2f position)
     {
         if (!textura.loadFromFile("assets/images/verde_spritesheet.png"))
         {
@@ -174,31 +164,6 @@ public:
 
         // Cambia esto si se ve muy grande o muy pequeño
         sprite.setScale(0.25f, 0.25f);
-        cargarTextura(texturePath);
-    }
-
-    bool cargarTextura(const std::string& texturePath)
-    {
-        sf::Image imagen;
-        if (!imagen.loadFromFile(texturePath))
-        {
-            std::cout << "Error: no se pudo cargar " << texturePath << std::endl;
-            return false;
-        }
-
-        textura.loadFromImage(imagen);
-
-        sf::Vector2u size = textura.getSize();
-        frameWidth = static_cast<int>(size.x / numFrames);
-        frameHeight = static_cast<int>(size.y / 4);
-        currentFrame = 0;
-        calcularOrigenes(imagen);
-
-        sprite.setTexture(textura, true);
-        sprite.setTextureRect(sf::IntRect(0, 0, frameWidth, frameHeight));
-        sprite.setScale(56.0f / frameHeight, 56.0f / frameHeight);
-        centrarSprite();
-        return true;
     }
 
     void move(float offsetX, float offsetY, Direccion nuevaDireccion)
@@ -304,7 +269,6 @@ private:
 
     int frameWidth = 240;
     int frameHeight = 233;
-    std::vector<sf::Vector2f> origenesFrames;
 
     // VELOCIDAD DE ANIMACIÓN
     // Menor número = más rápido
@@ -323,68 +287,17 @@ private:
     }
     else if (direccion == DERECHA)
     {
-        return 2; // derecha
+        return 3; // derecha
     }
     else
     {
-        return 3; // izquierda
+        return 2; // izquierda
     }
 }
 
-    void calcularOrigenes(const sf::Image& imagen)
-    {
-        origenesFrames.clear();
-        origenesFrames.resize(numFrames * 4, sf::Vector2f(frameWidth / 2.0f, frameHeight / 2.0f));
-
-        for (int fila = 0; fila < 4; fila++)
-        {
-            for (int frame = 0; frame < numFrames; frame++)
-            {
-                int startX = frame * frameWidth;
-                int startY = fila * frameHeight;
-                int minX = frameWidth;
-                int minY = frameHeight;
-                int maxX = -1;
-                int maxY = -1;
-
-                for (int y = 0; y < frameHeight; y++)
-                {
-                    for (int x = 0; x < frameWidth; x++)
-                    {
-                        sf::Color pixel = imagen.getPixel(startX + x, startY + y);
-                        if (pixel.a > 10)
-                        {
-                            if (x < minX) minX = x;
-                            if (y < minY) minY = y;
-                            if (x > maxX) maxX = x;
-                            if (y > maxY) maxY = y;
-                        }
-                    }
-                }
-
-                if (maxX >= minX && maxY >= minY)
-                {
-                    origenesFrames[fila * numFrames + frame] = sf::Vector2f(
-                        (minX + maxX) / 2.0f,
-                        (minY + maxY) / 2.0f
-                    );
-                }
-            }
-        }
-    }
-
     void centrarSprite()
     {
-        int fila = obtenerFilaDireccion();
-        int indice = fila * numFrames + currentFrame;
-        if (indice >= 0 && indice < static_cast<int>(origenesFrames.size()))
-        {
-            sprite.setOrigin(origenesFrames[indice]);
-        }
-        else
-        {
-            sprite.setOrigin(frameWidth / 2.0f, frameHeight / 2.0f);
-        }
+        sprite.setOrigin(frameWidth / 2.0f, frameHeight / 2.0f);
     }
 };
 
@@ -452,14 +365,8 @@ public:
     static const int DESTRUCTIBLE = 2;
 
     Mapa()
-        : objetosMapaCargados(false)
     {
         srand(static_cast<unsigned>(time(0)));
-        objetosMapaCargados = texturaObjetosMapa.loadFromFile("assets/images/Objetos mapa.png");
-        if (!objetosMapaCargados)
-        {
-            std::cout << "Error: no se pudo cargar assets/images/Objetos mapa.png" << std::endl;
-        }
         inicializarGrid();
     }
 
@@ -509,7 +416,6 @@ public:
 
     void generarFisicas(PhysicsSpace& physics)
     {
-        limpiarFisicas();
         // Recorrer grid y crear cuerpos estáticos para muros
         for (int i = 0; i < 13; i++)
         {
@@ -531,20 +437,6 @@ public:
         }
     }
 
-    void limpiarFisicas()
-    {
-        for (auto& par : bodiesMap)
-        {
-            b2BodyId bodyId = par.second;
-            if (b2Body_IsValid(bodyId))
-            {
-                b2DestroyBody(bodyId);
-            }
-        }
-
-        bodiesMap.clear();
-    }
-
     void draw(sf::RenderWindow& window)
     {
         for (int i = 0; i < 13; i++)
@@ -553,22 +445,6 @@ public:
             {
                 if (grid[i][j] != VACIO)
                 {
-                    if (objetosMapaCargados)
-                    {
-                        sf::Vector2u size = texturaObjetosMapa.getSize();
-                        int tileWidth = static_cast<int>(size.x / 4);
-                        int tileHeight = static_cast<int>(size.y / 4);
-                        int tileCol = (grid[i][j] == DESTRUCTIBLE) ? 0 : 2;
-
-                        sf::Sprite objeto;
-                        objeto.setTexture(texturaObjetosMapa);
-                        objeto.setTextureRect(sf::IntRect(tileCol * tileWidth, 0, tileWidth, tileHeight));
-                        objeto.setScale(64.0f / tileWidth, 64.0f / tileHeight);
-                        objeto.setPosition(j * 64.0f, i * 64.0f);
-                        window.draw(objeto);
-                        continue;
-                    }
-
                     sf::RectangleShape celda(sf::Vector2f(64.0f, 64.0f));
 
                     // Color según tipo
@@ -646,8 +522,6 @@ public:
 private:
     int grid[13][15];
     std::map<std::pair<int, int>, b2BodyId> bodiesMap;  // Mapeo (fila, col) -> b2BodyId
-    sf::Texture texturaObjetosMapa;
-    bool objetosMapaCargados;
 };
 
 // ============== FIN MAPA ==============
@@ -656,9 +530,8 @@ private:
 class Explosion
 {
 public:
-    Explosion(int centroFila, int centroCol, Mapa& mapa, int rango = 2, std::vector<PowerUp>* pItems = nullptr,
-              sf::Color colorExplosion = sf::Color(255, 165, 0))
-        : activa(true), color(colorExplosion), pListaItems(pItems)
+    Explosion(int centroFila, int centroCol, Mapa& mapa, int rango = 2, std::vector<PowerUp>* pItems = nullptr)
+        : activa(true), pListaItems(pItems)
     {
         // Añadir el centro
         celdasAfectadas.push_back({centroFila, centroCol});
@@ -786,7 +659,7 @@ public:
             for (const auto& celda : celdasAfectadas)
             {
                 sf::RectangleShape fuego(sf::Vector2f(64.0f, 64.0f));
-                fuego.setFillColor(color);
+                fuego.setFillColor(sf::Color(255, 165, 0));  // Naranja
                 fuego.setPosition(celda.y * 64.0f, celda.x * 64.0f);
                 window.draw(fuego);
             }
@@ -801,7 +674,6 @@ private:
     std::vector<sf::Vector2i> celdasAfectadas;
     sf::Clock temporizador;
     bool activa;
-    sf::Color color;
     std::vector<PowerUp>* pListaItems;
 };
 
@@ -811,18 +683,15 @@ private:
 class Bomba
 {
 public:
-    Bomba(int fila, int columna, PhysicsSpace& physics, const std::string& texturePath,
-          sf::Color colorExplosion, int rango)
-        : fila(fila), columna(columna), activa(true), rangoExplosion(rango),
-          colorExplosion(colorExplosion), bodyId(b2_nullBodyId), texturaCargada(false)
+    Bomba(int fila, int columna, PhysicsSpace& physics)
+        : fila(fila), columna(columna), activa(true)
     {
-        // La bomba se maneja por celda y no bloquea fisicamente al jugador.
-        (void)physics;
-        texturaCargada = textura.loadFromFile(texturePath);
-        if (!texturaCargada)
-        {
-            std::cout << "Error: no se pudo cargar " << texturePath << std::endl;
-        }
+        // Calcular posición en píxeles: centro de la celda
+        float posX = columna * 64.0f + 32.0f;
+        float posY = fila * 64.0f + 32.0f;
+
+        // Crear cuerpo estático en Box2D v3.0 (48x48 para la bomba)
+        bodyId = physics.createStaticBody(posX, posY, 48.0f, 48.0f);
 
         // Iniciar temporizador
         temporizador.restart();
@@ -856,25 +725,10 @@ public:
             float posY = fila * 64.0f + 32.0f;
 
             // Dibujar círculo negro (radio 24px)
-            if (texturaCargada)
-            {
-                sf::Sprite bomba;
-                sf::Vector2u size = textura.getSize();
-                bomba.setTexture(textura);
-                bomba.setTextureRect(sf::IntRect(0, 0, static_cast<int>(size.x), static_cast<int>(size.y)));
-                bomba.setOrigin(size.x / 2.0f, size.y / 2.0f);
-                float escala = 58.0f / static_cast<float>(std::max(size.x, size.y));
-                bomba.setScale(escala, escala);
-                bomba.setPosition(posX, posY);
-                window.draw(bomba);
-            }
-            else
-            {
-                sf::CircleShape bomba(24.0f);
-                bomba.setFillColor(sf::Color::Black);
-                bomba.setPosition(posX - 24.0f, posY - 24.0f);
-                window.draw(bomba);
-            }
+            sf::CircleShape bomba(24.0f);
+            bomba.setFillColor(sf::Color::Black);
+            bomba.setPosition(posX - 24.0f, posY - 24.0f);  // Centrar
+            window.draw(bomba);
         }
     }
 
@@ -882,19 +736,13 @@ public:
 
     int getFila() const { return fila; }
     int getColumna() const { return columna; }
-    int getRangoExplosion() const { return rangoExplosion; }
-    sf::Color getColorExplosion() const { return colorExplosion; }
 
 private:
     int fila;
     int columna;
     bool activa;
-    int rangoExplosion;
-    sf::Color colorExplosion;
     b2BodyId bodyId;
     sf::Clock temporizador;
-    sf::Texture textura;
-    bool texturaCargada;
 };
 
 // ============== FIN BOMBA ==============
@@ -903,12 +751,10 @@ private:
 class Knight
 {
 public:
-    Knight(sf::Vector2f position, PhysicsSpace& physics, const std::string& texturePath = "assets/images/verde_spritesheet.png")
-        : personaje(position, texturePath), physicsSpace(physics), 
+    Knight(sf::Vector2f position, PhysicsSpace& physics)
+        : personaje(position), physicsSpace(physics), 
           maxBombas(1), rangoFuego(1), speed(10.0f),
-          speedOriginal(10.0f), vidas(3),
-          rutaBomba("assets/images/Bomba verde.png"),
-          colorExplosion(sf::Color(90, 255, 90, 190))
+          speedOriginal(10.0f), vidas(3)
     {
         // Crear cuerpo dinámico en Box2D v3.0
         bodyId = physicsSpace.createDynamicBody(
@@ -921,10 +767,7 @@ public:
         posicionOriginal = position;
     }
 
-    void handleInput(sf::Keyboard::Key arriba = sf::Keyboard::W,
-                     sf::Keyboard::Key abajo = sf::Keyboard::S,
-                     sf::Keyboard::Key derecha = sf::Keyboard::D,
-                     sf::Keyboard::Key izquierda = sf::Keyboard::A)
+    void handleInput()
     {
         // Usar la velocidad del Knight (modificable por power-ups)
         
@@ -932,25 +775,25 @@ public:
         Direccion dirActual = direccionActual;
         bool seMovio = false;
 
-        if (sf::Keyboard::isKeyPressed(arriba))
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::W))
         {
             velocity.y = -speed;
             dirActual = ARRIBA;
             seMovio = true;
         }
-        else if (sf::Keyboard::isKeyPressed(abajo))
+        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::S))
         {
             velocity.y = speed;
             dirActual = ABAJO;
             seMovio = true;
         }
-        else if (sf::Keyboard::isKeyPressed(derecha))
+        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::D))
         {
             velocity.x = speed;
             dirActual = DERECHA;
             seMovio = true;
         }
-        else if (sf::Keyboard::isKeyPressed(izquierda))
+        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::A))
         {
             velocity.x = -speed;
             dirActual = IZQUIERDA;
@@ -1000,38 +843,6 @@ public:
         personaje.draw(window);
     }
 
-    void cambiarSprite(const std::string& texturePath)
-    {
-        personaje.cargarTextura(texturePath);
-    }
-
-    void configurarBomba(const std::string& texturePath, sf::Color color)
-    {
-        rutaBomba = texturePath;
-        colorExplosion = color;
-    }
-
-    void moverA(float posX, float posY)
-    {
-        if (b2Body_IsValid(bodyId))
-        {
-            b2Transform transform = {{posX / PIXELS_PER_METER, posY / PIXELS_PER_METER}, b2Rot_identity};
-            b2Body_SetTransform(bodyId, transform.p, transform.q);
-            b2Body_SetLinearVelocity(bodyId, {0.0f, 0.0f});
-        }
-        personaje.setPhysicsPosition(posX, posY);
-    }
-
-    void reiniciar(float posX, float posY)
-    {
-        vidas = 3;
-        maxBombas = 1;
-        rangoFuego = 1;
-        speed = speedOriginal;
-        posicionOriginal = sf::Vector2f(posX, posY);
-        moverA(posX, posY);
-    }
-
     void plantarBomba(Mapa& mapa, std::vector<Bomba>& bombas, PhysicsSpace& physics)
     {
         // Verificar que no se supere el máximo de bombas
@@ -1071,7 +882,7 @@ public:
         }
 
         // Crear nueva bomba
-        Bomba nuevaBomba(fila, columna, physics, rutaBomba, colorExplosion, rangoFuego);
+        Bomba nuevaBomba(fila, columna, physics);
         bombas.push_back(nuevaBomba);
     }
 
@@ -1103,8 +914,8 @@ public:
         if (vidas > 0)
         {
             // Reiniciar posición física al centro de [1][1]
-            float posX = posicionOriginal.x;
-            float posY = posicionOriginal.y;
+            float posX = 1.0f * 64.0f + 32.0f;  // Columna 1, centro
+            float posY = 1.0f * 64.0f + 32.0f;  // Fila 1, centro
 
             if (b2Body_IsValid(bodyId))
             {
@@ -1136,8 +947,6 @@ private:
     float speedOriginal;
     sf::Vector2f posicionOriginal;
     int vidas;
-    std::string rutaBomba;
-    sf::Color colorExplosion;
 };
 
 // ============== FIN KNIGHT - Box2D v3.0 ==============
@@ -1447,7 +1256,7 @@ void cargarNivel(int nivel, Mapa& mapa, Knight& knight, std::vector<Enemigo>& en
         // Spawneamos el Boss en el centro del mapa [6][7]
         float bosX = 7.0f * 64.0f + 32.0f;
         float bosY = 6.0f * 64.0f + 32.0f;
-        jefes.emplace_back(bosX, bosY, physics, "assets/images/JEFE.png");
+        jefes.emplace_back(bosX, bosY, physics, "assets/images/negro_spritesheet.png");
         std::cout << "NIVEL 3 INICIADO - ¡EL JEFE FINAL HA LLEGADO!" << std::endl;
         return;
     }
@@ -1471,7 +1280,7 @@ void cargarNivel(int nivel, Mapa& mapa, Knight& knight, std::vector<Enemigo>& en
 
     for (int i = 0; i < cantidadEnemigos && i < static_cast<int>(spawnPoints.size()); i++)
     {
-        enemigos.emplace_back(spawnPoints[i].first, spawnPoints[i].second, physics, "assets/images/ENEMIGO1.png");
+        enemigos.emplace_back(spawnPoints[i].first, spawnPoints[i].second, physics, "assets/images/rojo_spritesheet.png");
     }
 
     std::cout << "NIVEL " << nivel << " INICIADO - " << cantidadEnemigos << " ENEMIGOS" << std::endl;
@@ -1485,22 +1294,20 @@ int main()
     window.setFramerateLimit(60);
 
     // Máquina de estados y nivel (FASE 5)
-    EstadoJuego estadoActual = MENU;
-    ModoJuego modoActual = ARCADE;
+    EstadoJuego estadoActual = JUGANDO;
     int nivelActual = 1;
-    int modoSeleccionado = 0;
-    int caballeroSeleccionado = 0;
-    int caballeroSeleccionadoP2 = 1;
 
     // Instanciar Physics Engine
     PhysicsSpace physics;
 
     // Instanciar Mapa
     Mapa mapa;
+    
+    // Generar físicas del mapa
+    mapa.generarFisicas(physics);
 
     // Instanciar Knight (jugador)
     Knight knight(sf::Vector2f(96.0f, 96.0f), physics);
-    Knight knight2(sf::Vector2f(-500.0f, -500.0f), physics, "assets/images/Azul_caminar.png");
 
     // Vector de bombas (FASE 2)
     std::vector<Bomba> listaBombas;
@@ -1516,36 +1323,9 @@ int main()
 
     // Vector de jefes (FASE 6)
     std::vector<Boss> listaJefes;
-
-    std::vector<std::string> nombresModos = {"ARCADE", "MULTIJUGADOR"};
-    std::vector<std::string> nombresCaballeros = {"VERDE", "AZUL", "ROJO", "NEGRO"};
-    std::vector<std::string> rutasCaballeros = {
-        "assets/images/verde_spritesheet.png",
-        "assets/images/Azul_caminar.png",
-        "assets/images/Rojo_caminar.png",
-        "assets/images/Negro_caminar.png"
-    };
-    std::vector<std::string> rutasBombas = {
-        "assets/images/Bomba verde.png",
-        "assets/images/Bomba azul.png",
-        "assets/images/Bomba Roja.png",
-        "assets/images/Bomba negra.png"
-    };
-    std::vector<sf::Color> coloresExplosiones = {
-        sf::Color(80, 255, 100, 190),
-        sf::Color(80, 190, 255, 190),
-        sf::Color(255, 80, 70, 190),
-        sf::Color(170, 90, 255, 190)
-    };
-
-    std::vector<sf::Texture> texturasCaballeros(rutasCaballeros.size());
-    for (int i = 0; i < static_cast<int>(rutasCaballeros.size()); i++)
-    {
-        if (!texturasCaballeros[i].loadFromFile(rutasCaballeros[i]))
-        {
-            std::cout << "Error: no se pudo cargar " << rutasCaballeros[i] << std::endl;
-        }
-    }
+    
+    // Cargar primer nivel
+    cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics);
 
     // SISTEMA DE AUDIO (FASE 1)
     sf::Music musicaFondo;
@@ -1625,238 +1405,31 @@ int main()
             // Manejar input de Espacio para plantar bomba (FASE 2)
             if (event.type == sf::Event::KeyPressed)
             {
-                if (estadoActual == MENU)
-                {
-                    if (event.key.code == sf::Keyboard::Up || event.key.code == sf::Keyboard::Down)
-                    {
-                        modoSeleccionado = 1 - modoSeleccionado;
-                    }
-                    else if (event.key.code == sf::Keyboard::Return)
-                    {
-                        estadoActual = SELECCION_PERSONAJE;
-                    }
-                }
-                else if (estadoActual == SELECCION_PERSONAJE)
-                {
-                    if (event.key.code == sf::Keyboard::Left)
-                    {
-                        caballeroSeleccionado--;
-                        if (caballeroSeleccionado < 0)
-                            caballeroSeleccionado = static_cast<int>(rutasCaballeros.size()) - 1;
-                    }
-                    else if (event.key.code == sf::Keyboard::Right)
-                    {
-                        caballeroSeleccionado++;
-                        if (caballeroSeleccionado >= static_cast<int>(rutasCaballeros.size()))
-                            caballeroSeleccionado = 0;
-                    }
-                    else if (modoSeleccionado == 1 && event.key.code == sf::Keyboard::A)
-                    {
-                        caballeroSeleccionadoP2--;
-                        if (caballeroSeleccionadoP2 < 0)
-                            caballeroSeleccionadoP2 = static_cast<int>(rutasCaballeros.size()) - 1;
-                    }
-                    else if (modoSeleccionado == 1 && event.key.code == sf::Keyboard::D)
-                    {
-                        caballeroSeleccionadoP2++;
-                        if (caballeroSeleccionadoP2 >= static_cast<int>(rutasCaballeros.size()))
-                            caballeroSeleccionadoP2 = 0;
-                    }
-                    else if (event.key.code == sf::Keyboard::Escape)
-                    {
-                        estadoActual = MENU;
-                    }
-                    else if (event.key.code == sf::Keyboard::Return)
-                    {
-                        modoActual = (modoSeleccionado == 0) ? ARCADE : MULTIJUGADOR;
-                        knight.cambiarSprite(rutasCaballeros[caballeroSeleccionado]);
-                        knight2.cambiarSprite(rutasCaballeros[caballeroSeleccionadoP2]);
-                        knight.configurarBomba(rutasBombas[caballeroSeleccionado], coloresExplosiones[caballeroSeleccionado]);
-                        knight2.configurarBomba(rutasBombas[caballeroSeleccionadoP2], coloresExplosiones[caballeroSeleccionadoP2]);
-                        estadoActual = JUGANDO;
-                        nivelActual = 1;
-
-                        if (modoActual == ARCADE)
-                        {
-                            knight.reiniciar(96.0f, 96.0f);
-                            knight2.moverA(-500.0f, -500.0f);
-                            cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics);
-                        }
-                        else
-                        {
-                            listaEnemigos.clear();
-                            listaBombas.clear();
-                            listaExplosiones.clear();
-                            listaItems.clear();
-                            listaJefes.clear();
-                            mapa.inicializarGrid();
-                            mapa.generarFisicas(physics);
-                            knight.reiniciar(96.0f, 96.0f);
-                            knight2.reiniciar(864.0f, 736.0f);
-                        }
-                    }
-                }
-                else if (event.key.code == sf::Keyboard::Space && estadoActual == JUGANDO)
+                if (event.key.code == sf::Keyboard::Space && estadoActual == JUGANDO)
                 {
                     knight.plantarBomba(mapa, listaBombas, physics);
                 }
-                else if (event.key.code == sf::Keyboard::Return && estadoActual == JUGANDO && modoActual == MULTIJUGADOR)
-                {
-                    knight2.plantarBomba(mapa, listaBombas, physics);
-                }
                 // Reiniciar con Enter si es GAME_OVER o VICTORIA (FASE 5)
-                else if (event.key.code == sf::Keyboard::Return && (estadoActual == GAME_OVER || estadoActual == VICTORIA))
+                if (event.key.code == sf::Keyboard::Return && (estadoActual == GAME_OVER || estadoActual == VICTORIA))
                 {
-                    estadoActual = MENU;
+                    estadoActual = JUGANDO;
+                    nivelActual = 1;
+                    cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics);
                 }
             }
-        }
-
-        if (estadoActual == MENU || estadoActual == SELECCION_PERSONAJE)
-        {
-            window.clear(sf::Color(28, 28, 38));
-
-            if (fuenteCargada)
-            {
-                sf::Text titulo;
-                titulo.setFont(fuente);
-                titulo.setCharacterSize(56);
-                titulo.setFillColor(sf::Color::White);
-                titulo.setString("EXPLOSIVE KNIGHTS");
-                titulo.setPosition(960.0f / 2.0f - titulo.getLocalBounds().width / 2.0f, 70.0f);
-                window.draw(titulo);
-
-                if (estadoActual == MENU)
-                {
-                    sf::Text subtitulo;
-                    subtitulo.setFont(fuente);
-                    subtitulo.setCharacterSize(30);
-                    subtitulo.setFillColor(sf::Color(220, 220, 220));
-                    subtitulo.setString("Elige modo de juego");
-                    subtitulo.setPosition(960.0f / 2.0f - subtitulo.getLocalBounds().width / 2.0f, 180.0f);
-                    window.draw(subtitulo);
-
-                    for (int i = 0; i < static_cast<int>(nombresModos.size()); i++)
-                    {
-                        sf::Text opcion;
-                        opcion.setFont(fuente);
-                        opcion.setCharacterSize(36);
-                        opcion.setFillColor(i == modoSeleccionado ? sf::Color::Yellow : sf::Color::White);
-                        opcion.setString((i == modoSeleccionado ? "> " : "  ") + nombresModos[i]);
-                        opcion.setPosition(960.0f / 2.0f - opcion.getLocalBounds().width / 2.0f, 280.0f + i * 70.0f);
-                        window.draw(opcion);
-                    }
-
-                    sf::Text ayuda;
-                    ayuda.setFont(fuente);
-                    ayuda.setCharacterSize(22);
-                    ayuda.setFillColor(sf::Color(180, 180, 180));
-                    ayuda.setString("Arriba/Abajo: cambiar | Enter: continuar");
-                    ayuda.setPosition(960.0f / 2.0f - ayuda.getLocalBounds().width / 2.0f, 680.0f);
-                    window.draw(ayuda);
-                }
-                else
-                {
-                    sf::Text subtitulo;
-                    subtitulo.setFont(fuente);
-                    subtitulo.setCharacterSize(30);
-                    subtitulo.setFillColor(sf::Color(220, 220, 220));
-                    subtitulo.setString("Elige tu caballero");
-                    subtitulo.setPosition(960.0f / 2.0f - subtitulo.getLocalBounds().width / 2.0f, 170.0f);
-                    window.draw(subtitulo);
-
-                    if (texturasCaballeros[caballeroSeleccionado].getSize().x > 0)
-                    {
-                        sf::Sprite preview;
-                        sf::Vector2u size = texturasCaballeros[caballeroSeleccionado].getSize();
-                        int previewFrameWidth = static_cast<int>(size.x / 7);
-                        int previewFrameHeight = static_cast<int>(size.y / 4);
-                        preview.setTexture(texturasCaballeros[caballeroSeleccionado]);
-                        preview.setTextureRect(sf::IntRect(0, 0, previewFrameWidth, previewFrameHeight));
-                        preview.setOrigin(previewFrameWidth / 2.0f, previewFrameHeight / 2.0f);
-                        preview.setScale(160.0f / previewFrameHeight, 160.0f / previewFrameHeight);
-                        preview.setPosition(modoSeleccionado == 1 ? 340.0f : 480.0f, 390.0f);
-                        window.draw(preview);
-                    }
-
-                    if (modoSeleccionado == 1 && texturasCaballeros[caballeroSeleccionadoP2].getSize().x > 0)
-                    {
-                        sf::Sprite previewP2;
-                        sf::Vector2u size = texturasCaballeros[caballeroSeleccionadoP2].getSize();
-                        int previewFrameWidth = static_cast<int>(size.x / 7);
-                        int previewFrameHeight = static_cast<int>(size.y / 4);
-                        previewP2.setTexture(texturasCaballeros[caballeroSeleccionadoP2]);
-                        previewP2.setTextureRect(sf::IntRect(0, 0, previewFrameWidth, previewFrameHeight));
-                        previewP2.setOrigin(previewFrameWidth / 2.0f, previewFrameHeight / 2.0f);
-                        previewP2.setScale(160.0f / previewFrameHeight, 160.0f / previewFrameHeight);
-                        previewP2.setPosition(620.0f, 390.0f);
-                        window.draw(previewP2);
-                    }
-
-                    sf::Text nombre;
-                    nombre.setFont(fuente);
-                    nombre.setCharacterSize(40);
-                    nombre.setFillColor(sf::Color::Yellow);
-                    nombre.setString(modoSeleccionado == 1 ? "P1 < " + nombresCaballeros[caballeroSeleccionado] + " >" : "< " + nombresCaballeros[caballeroSeleccionado] + " >");
-                    nombre.setPosition(modoSeleccionado == 1 ? 180.0f : 960.0f / 2.0f - nombre.getLocalBounds().width / 2.0f, 550.0f);
-                    window.draw(nombre);
-
-                    if (modoSeleccionado == 1)
-                    {
-                        sf::Text nombreP2;
-                        nombreP2.setFont(fuente);
-                        nombreP2.setCharacterSize(40);
-                        nombreP2.setFillColor(sf::Color::Cyan);
-                        nombreP2.setString("P2 < " + nombresCaballeros[caballeroSeleccionadoP2] + " >");
-                        nombreP2.setPosition(520.0f, 550.0f);
-                        window.draw(nombreP2);
-                    }
-
-                    sf::Text modo;
-                    modo.setFont(fuente);
-                    modo.setCharacterSize(24);
-                    modo.setFillColor(sf::Color(210, 210, 210));
-                    modo.setString("Modo: " + nombresModos[modoSeleccionado]);
-                    modo.setPosition(960.0f / 2.0f - modo.getLocalBounds().width / 2.0f, 620.0f);
-                    window.draw(modo);
-
-                    sf::Text ayuda;
-                    ayuda.setFont(fuente);
-                    ayuda.setCharacterSize(22);
-                    ayuda.setFillColor(sf::Color(180, 180, 180));
-                    ayuda.setString(modoSeleccionado == 1 ? "P1: Izq/Der | P2: A/D | Enter: jugar | Esc: volver" : "Izquierda/Derecha: cambiar | Enter: jugar | Esc: volver");
-                    ayuda.setPosition(960.0f / 2.0f - ayuda.getLocalBounds().width / 2.0f, 690.0f);
-                    window.draw(ayuda);
-                }
-            }
-
-            window.display();
-            continue;
         }
 
         // INPUT
         knight.handleInput();
-        if (modoActual == MULTIJUGADOR)
-        {
-            knight2.handleInput(sf::Keyboard::Up, sf::Keyboard::Down, sf::Keyboard::Right, sf::Keyboard::Left);
-        }
 
         // PHYSICS STEP (Box2D v3.0)
         physics.step(timeStep);
 
         // SYNC GRAPHICS WITH PHYSICS
         knight.syncWithPhysics();
-        if (modoActual == MULTIJUGADOR)
-        {
-            knight2.syncWithPhysics();
-        }
 
         // UPDATE SPRITES
         knight.update();
-        if (modoActual == MULTIJUGADOR)
-        {
-            knight2.update();
-        }
 
         // UPDATE BOMBAS (FASE 2) + EXPLOSIONES (FASE 3)
         for (auto& bomba : listaBombas)
@@ -1864,8 +1437,7 @@ int main()
             if (bomba.update(physics))  // Si retorna true = explotó
             {
                 // Crear explosión con rango del Knight
-                Explosion explosion(bomba.getFila(), bomba.getColumna(), mapa,
-                                    bomba.getRangoExplosion(), &listaItems, bomba.getColorExplosion());
+                Explosion explosion(bomba.getFila(), bomba.getColumna(), mapa, knight.getRangoFuego(), &listaItems);
                 listaExplosiones.push_back(explosion);
             }
         }
@@ -1906,14 +1478,11 @@ int main()
         }
 
         // UPDATE ENEMIGOS (FASE 4)
-        if (modoActual == ARCADE)
+        for (auto& enemigo : listaEnemigos)
         {
-            for (auto& enemigo : listaEnemigos)
+            if (enemigo.isVivo())
             {
-                if (enemigo.isVivo())
-                {
-                    enemigo.update(mapa, physics);
-                }
+                enemigo.update(mapa, physics);
             }
         }
 
@@ -1932,16 +1501,12 @@ int main()
         }
 
         // UPDATE BOSS (FASE 6)
-        if (modoActual == ARCADE)
+        for (auto& boss : listaJefes)
         {
-            for (auto& boss : listaJefes)
-            {
-                boss.update(mapa, physics);
-            }
+            boss.update(mapa, physics);
         }
 
         // Daño a Boss por explosiones (FASE 6)
-        if (modoActual == ARCADE)
         for (auto& boss : listaJefes)
         {
             b2Vec2 posBoss = b2Body_GetPosition(boss.getBodyId());
@@ -1978,7 +1543,6 @@ int main()
         }
 
         // Ataque de Boss al jugador (FASE 6)
-        if (modoActual == ARCADE)
         for (auto& boss : listaJefes)
         {
             b2Vec2 posKnightBoss = b2Body_GetPosition(knight.getBodyId());
@@ -2003,24 +1567,19 @@ int main()
         if (estadoActual == JUGANDO)
         {
             // Verificar si el jugador murió
-            if (modoActual == MULTIJUGADOR && (knight.getVidas() <= 0 || knight2.getVidas() <= 0))
+            if (knight.getVidas() <= 0)
             {
                 estadoActual = GAME_OVER;
-                std::cout << "FIN DEL MULTIJUGADOR - Presiona ENTER para volver al menu" << std::endl;
-            }
-            else if (knight.getVidas() <= 0)
-            {
-                estadoActual = GAME_OVER;
-                std::cout << "GAME OVER - Presiona ENTER para volver al menu" << std::endl;
+                std::cout << "GAME OVER - Presiona ENTER para reiniciar" << std::endl;
             }
             // FASE 6: Si estamos en nivel 3, verificar si el Boss fue derrotado
-            else if (modoActual == ARCADE && nivelActual == 3 && listaJefes.empty())
+            else if (nivelActual == 3 && listaJefes.empty())
             {
                 estadoActual = VICTORIA;
                 std::cout << "¡VICTORIA! ¡Derrotaste al Jefe Final! - Presiona ENTER para reiniciar" << std::endl;
             }
             // Verificar si ganó el nivel (todos los enemigos muertos) - Niveles 1 y 2
-            else if (modoActual == ARCADE && listaEnemigos.empty() && nivelActual < 3)
+            else if (listaEnemigos.empty() && nivelActual < 3)
             {
                 nivelActual++;
                 std::cout << "¡NIVEL COMPLETADO! Avanzando a NIVEL " << nivelActual << std::endl;
@@ -2040,12 +1599,6 @@ int main()
         float pixelYKnight = posKnight.y * PIXELS_PER_METER;
         int filaKnight = static_cast<int>(pixelYKnight / 64.0f);
         int colKnight = static_cast<int>(pixelXKnight / 64.0f);
-
-        b2Vec2 posKnight2 = b2Body_GetPosition(knight2.getBodyId());
-        float pixelXKnight2 = posKnight2.x * PIXELS_PER_METER;
-        float pixelYKnight2 = posKnight2.y * PIXELS_PER_METER;
-        int filaKnight2 = static_cast<int>(pixelYKnight2 / 64.0f);
-        int colKnight2 = static_cast<int>(pixelXKnight2 / 64.0f);
 
         // Recopilar items
         for (auto& item : listaItems)
@@ -2084,15 +1637,9 @@ int main()
                         knight.morir(physics);
                         break;
                     }
-                    if (modoActual == MULTIJUGADOR && celda.x == filaKnight2 && celda.y == colKnight2)
-                    {
-                        knight2.morir(physics);
-                        break;
-                    }
                 }
 
                 // Daño por fuego a enemigos (FASE 4)
-                if (modoActual == ARCADE)
                 for (auto& enemigo : listaEnemigos)
                 {
                     if (enemigo.isVivo())
@@ -2117,7 +1664,6 @@ int main()
         }
 
         // Ataque de enemigos al jugador (FASE 4)
-        if (modoActual == ARCADE)
         for (auto& enemigo : listaEnemigos)
         {
             if (enemigo.isVivo())
@@ -2138,18 +1684,9 @@ int main()
         // ACTUALIZAR HUD (FASE 5)
         if (fuenteCargada)
         {
-            std::string hudText;
-            if (modoActual == ARCADE)
-            {
-                hudText = "MODO: ARCADE | NIVEL: " + std::to_string(nivelActual) + 
-                          " | VIDAS: " + std::to_string(knight.getVidas()) + 
-                          " | ENEMIGOS: " + std::to_string(listaEnemigos.size());
-            }
-            else
-            {
-                hudText = "MODO: MULTIJUGADOR | P1 VIDAS: " + std::to_string(knight.getVidas()) +
-                          " | P2 VIDAS: " + std::to_string(knight2.getVidas());
-            }
+            std::string hudText = "NIVEL: " + std::to_string(nivelActual) + 
+                                  " | VIDAS: " + std::to_string(knight.getVidas()) + 
+                                  " | ENEMIGOS: " + std::to_string(listaEnemigos.size());
             textoHUD.setString(hudText);
         }
 
@@ -2188,10 +1725,6 @@ int main()
         }
         
         knight.draw(window);
-        if (modoActual == MULTIJUGADOR)
-        {
-            knight2.draw(window);
-        }
 
         // RENDER HUD (FASE 5)
         if (fuenteCargada)
