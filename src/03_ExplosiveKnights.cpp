@@ -6,6 +6,7 @@
 #include <map>
 #include <cstdlib>
 #include <ctime>
+#include <cmath>
 
 enum Direccion
 {
@@ -25,6 +26,14 @@ enum EstadoJuego
 
 // ============== PHYSICS ENGINE (Box2D v3.0) ==============
 const float PIXELS_PER_METER = 30.0f;
+const float MAP_CELL_SIZE = 64.0f;
+const float WALL_HITBOX_SIZE = 56.0f;
+const float KNIGHT_HITBOX_SIZE = 34.0f;
+const float ENEMY_HITBOX_SIZE = 36.0f;
+const uint32_t COLLISION_DEFAULT = 0x0001;
+const uint32_t COLLISION_PLAYER = 0x0002;
+const uint32_t COLLISION_BOMB = 0x0004;
+const uint32_t COLLISION_ALL = 0xFFFFFFFF;
 
 class PhysicsSpace
 {
@@ -59,7 +68,9 @@ public:
         }
     }
 
-    b2BodyId createDynamicBody(float x, float y, float width, float height)
+    b2BodyId createDynamicBody(float x, float y, float width, float height,
+                               uint32_t categoryBits = COLLISION_DEFAULT,
+                               uint32_t maskBits = COLLISION_ALL)
     {
         if (!b2World_IsValid(world))
         {
@@ -83,6 +94,8 @@ public:
         b2ShapeDef shapeDef = b2DefaultShapeDef();
         shapeDef.density = 1.0f;
         shapeDef.friction = 0.3f;
+        shapeDef.filter.categoryBits = categoryBits;
+        shapeDef.filter.maskBits = maskBits;
 
         b2CreatePolygonShape(bodyId, &shapeDef, &polygon);
 
@@ -365,8 +378,28 @@ public:
     static const int DESTRUCTIBLE = 2;
 
     Mapa()
+        : objetosMapaCargados(false), mapaBaseCargado(false)
     {
         srand(static_cast<unsigned>(time(0)));
+
+        mapaBaseCargado = texturaMapaBase.loadFromFile("assets/images/Mapa.png");
+        if (!mapaBaseCargado)
+        {
+            std::cout << "Error: no se pudo cargar assets/images/Mapa.png" << std::endl;
+        }
+
+        sf::Image imagenObjetosMapa;
+        objetosMapaCargados = imagenObjetosMapa.loadFromFile("assets/images/Objetos del mapa.png");
+        if (objetosMapaCargados)
+        {
+            texturaObjetosMapa.loadFromImage(imagenObjetosMapa);
+            calcularRectsObjetos(imagenObjetosMapa);
+        }
+        else
+        {
+            std::cout << "Error: no se pudo cargar assets/images/Objetos del mapa.png" << std::endl;
+        }
+
         inicializarGrid();
     }
 
@@ -428,7 +461,7 @@ public:
                     float posY = i * 64.0f + 32.0f;
 
                     // Crear cuerpo estático en Box2D
-                    b2BodyId bodyId = physics.createStaticBody(posX, posY, 64.0f, 64.0f);
+                    b2BodyId bodyId = physics.createStaticBody(posX, posY, WALL_HITBOX_SIZE, WALL_HITBOX_SIZE);
                     
                     // Guardar el ID en el map (fila, columna) -> b2BodyId
                     bodiesMap[{i, j}] = bodyId;
@@ -439,12 +472,34 @@ public:
 
     void draw(sf::RenderWindow& window)
     {
+        if (mapaBaseCargado)
+        {
+            sf::Sprite fondo;
+            sf::Vector2u size = texturaMapaBase.getSize();
+            fondo.setTexture(texturaMapaBase);
+            fondo.setScale(960.0f / size.x, 832.0f / size.y);
+            fondo.setPosition(0.0f, 0.0f);
+            window.draw(fondo);
+        }
+
         for (int i = 0; i < 13; i++)
         {
             for (int j = 0; j < 15; j++)
             {
                 if (grid[i][j] != VACIO)
                 {
+                    bool esBorde = (i == 0 || i == 12 || j == 0 || j == 14);
+                    if (mapaBaseCargado && esBorde)
+                    {
+                        continue;
+                    }
+
+                    if (objetosMapaCargados)
+                    {
+                        dibujarObjetoMapa(window, i, j, grid[i][j]);
+                        continue;
+                    }
+
                     sf::RectangleShape celda(sf::Vector2f(64.0f, 64.0f));
 
                     // Color según tipo
@@ -520,8 +575,100 @@ public:
     }
 
 private:
+    void calcularRectsObjetos(const sf::Image& imagen)
+    {
+        (void)imagen;
+        const int columnas = 9;
+        const int filas = 4;
+        const int rects[filas][columnas][4] = {
+            {
+                {0, 130, 139, 183}, {139, 174, 107, 139}, {279, 188, 115, 125},
+                {422, 179, 116, 134}, {564, 189, 126, 124}, {717, 149, 117, 164},
+                {863, 174, 97, 139}, {988, 203, 117, 110}, {1127, 161, 113, 152}
+            },
+            {
+                {0, 407, 139, 205}, {139, 449, 107, 141}, {279, 461, 116, 133},
+                {422, 448, 119, 146}, {564, 461, 126, 132}, {718, 396, 113, 200},
+                {861, 440, 100, 147}, {988, 454, 116, 134}, {1124, 428, 109, 163}
+            },
+            {
+                {0, 668, 139, 271}, {139, 690, 139, 162}, {278, 703, 117, 147},
+                {421, 697, 119, 152}, {563, 707, 127, 142}, {716, 661, 118, 278},
+                {860, 690, 102, 164}, {986, 701, 117, 145}, {1119, 673, 122, 266}
+            },
+            {
+                {8, 939, 131, 188}, {139, 946, 139, 157}, {278, 954, 114, 148},
+                {418, 948, 120, 152}, {563, 961, 128, 142}, {712, 939, 122, 166},
+                {834, 940, 127, 165}, {989, 951, 114, 148}, {1121, 939, 113, 169}
+            }
+        };
+
+        rectsObjetos.clear();
+        rectsObjetos.resize(columnas * filas);
+
+        for (int fila = 0; fila < filas; fila++)
+        {
+            for (int columna = 0; columna < columnas; columna++)
+            {
+                rectsObjetos[fila * columnas + columna] = sf::IntRect(
+                    rects[fila][columna][0],
+                    rects[fila][columna][1],
+                    rects[fila][columna][2],
+                    rects[fila][columna][3]
+                );
+            }
+        }
+    }
+
+    int obtenerFilaTema(int fila, int columna) const
+    {
+        if (fila < 6 && columna < 7)
+            return 0;
+        if (fila < 6)
+            return 1;
+        if (columna < 7)
+            return 3;
+        return 2;
+    }
+
+    int obtenerColumnaObjeto(int fila, int columna, int tipo) const
+    {
+        if (tipo == DESTRUCTIBLE)
+        {
+            const int opcionesDestructibles[5] = {1, 2, 4, 7, 8};
+            return opcionesDestructibles[(fila * 3 + columna * 5) % 5];
+        }
+
+        return 3;
+    }
+
+    void dibujarObjetoMapa(sf::RenderWindow& window, int fila, int columna, int tipo)
+    {
+        const int columnas = 9;
+        int filaTema = obtenerFilaTema(fila, columna);
+        int columnaObjeto = obtenerColumnaObjeto(fila, columna, tipo);
+        int indice = filaTema * columnas + columnaObjeto;
+
+        if (indice < 0 || indice >= static_cast<int>(rectsObjetos.size()))
+            return;
+
+        sf::IntRect rect = rectsObjetos[indice];
+        sf::Sprite objeto;
+        objeto.setTexture(texturaObjetosMapa);
+        objeto.setTextureRect(rect);
+        objeto.setOrigin(rect.width / 2.0f, rect.height / 2.0f);
+        objeto.setScale(MAP_CELL_SIZE / rect.width, MAP_CELL_SIZE / rect.height);
+        objeto.setPosition(columna * 64.0f + 32.0f, fila * 64.0f + 32.0f);
+        window.draw(objeto);
+    }
+
     int grid[13][15];
     std::map<std::pair<int, int>, b2BodyId> bodiesMap;  // Mapeo (fila, col) -> b2BodyId
+    sf::Texture texturaMapaBase;
+    sf::Texture texturaObjetosMapa;
+    std::vector<sf::IntRect> rectsObjetos;
+    bool mapaBaseCargado;
+    bool objetosMapaCargados;
 };
 
 // ============== FIN MAPA ==============
@@ -684,22 +831,71 @@ class Bomba
 {
 public:
     Bomba(int fila, int columna, PhysicsSpace& physics)
-        : fila(fila), columna(columna), activa(true)
+        : fila(fila), columna(columna), activa(true), jugadorEncima(true), solida(false),
+          bodyId(b2_nullBodyId), shapeId(b2_nullShapeId)
     {
         // Calcular posición en píxeles: centro de la celda
         float posX = columna * 64.0f + 32.0f;
         float posY = fila * 64.0f + 32.0f;
 
         // Crear cuerpo estático en Box2D v3.0 (48x48 para la bomba)
-        bodyId = physics.createStaticBody(posX, posY, 48.0f, 48.0f);
+        b2WorldId worldId = physics.getWorldId();
+        if (b2World_IsValid(worldId))
+        {
+            b2BodyDef bodyDef = b2DefaultBodyDef();
+            bodyDef.type = b2_staticBody;
+            bodyDef.position.x = posX / PIXELS_PER_METER;
+            bodyDef.position.y = posY / PIXELS_PER_METER;
+            bodyId = b2CreateBody(worldId, &bodyDef);
+
+            b2Polygon polygon = b2MakeBox(
+                24.0f / PIXELS_PER_METER,
+                24.0f / PIXELS_PER_METER
+            );
+
+            b2ShapeDef shapeDef = b2DefaultShapeDef();
+            shapeDef.density = 0.0f;
+            shapeDef.filter.categoryBits = COLLISION_BOMB;
+            shapeDef.filter.maskBits = COLLISION_ALL & ~COLLISION_PLAYER;
+            shapeId = b2CreatePolygonShape(bodyId, &shapeDef, &polygon);
+        }
 
         // Iniciar temporizador
         temporizador.restart();
     }
 
-    bool update(PhysicsSpace& physics)
+    bool update(PhysicsSpace& physics, b2BodyId jugadorBodyId)
     {
         // Verificar si superó los 3 segundos
+        (void)physics;
+
+        if (activa && jugadorEncima && !solida && b2Body_IsValid(jugadorBodyId))
+        {
+            b2Vec2 posJugador = b2Body_GetPosition(jugadorBodyId);
+            float jugadorX = posJugador.x * PIXELS_PER_METER;
+            float jugadorY = posJugador.y * PIXELS_PER_METER;
+
+            float bombaX = columna * 64.0f + 32.0f;
+            float bombaY = fila * 64.0f + 32.0f;
+
+            bool aunSeTraslapan =
+                std::abs(jugadorX - bombaX) < 48.0f &&
+                std::abs(jugadorY - bombaY) < 48.0f;
+
+            if (!aunSeTraslapan)
+            {
+                jugadorEncima = false;
+                solida = true;
+
+                if (b2Shape_IsValid(shapeId))
+                {
+                    b2Filter filtroSolido = b2Shape_GetFilter(shapeId);
+                    filtroSolido.maskBits = COLLISION_ALL;
+                    b2Shape_SetFilter(shapeId, filtroSolido);
+                }
+            }
+        }
+
         if (activa && temporizador.getElapsedTime().asSeconds() >= 3.0f)
         {
             activa = false;
@@ -741,7 +937,10 @@ private:
     int fila;
     int columna;
     bool activa;
+    bool jugadorEncima;
+    bool solida;
     b2BodyId bodyId;
+    b2ShapeId shapeId;
     sf::Clock temporizador;
 };
 
@@ -761,7 +960,9 @@ public:
             position.x, 
             position.y, 
             48.0f,   // ancho del hitbox
-            48.0f    // alto del hitbox
+            48.0f,   // alto del hitbox
+            COLLISION_PLAYER,
+            COLLISION_ALL
         );
         
         posicionOriginal = position;
@@ -1434,7 +1635,7 @@ int main()
         // UPDATE BOMBAS (FASE 2) + EXPLOSIONES (FASE 3)
         for (auto& bomba : listaBombas)
         {
-            if (bomba.update(physics))  // Si retorna true = explotó
+            if (bomba.update(physics, knight.getBodyId()))  // Si retorna true = explotó
             {
                 // Crear explosión con rango del Knight
                 Explosion explosion(bomba.getFila(), bomba.getColumna(), mapa, knight.getRangoFuego(), &listaItems);
