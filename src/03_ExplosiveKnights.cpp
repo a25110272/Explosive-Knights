@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <cmath>
+#include "Mapa.hpp"
 
 enum Direccion
 {
@@ -368,331 +369,7 @@ private:
 
 // ============== FIN POWER-UP ==============
 
-// ============== MAPA (FASE 1: Escenario) ==============
-class Mapa
-{
-public:
-    // Tipos de celda
-    static const int VACIO = 0;
-    static const int INDESTRUCTIBLE = 1;
-    static const int DESTRUCTIBLE = 2;
-
-    Mapa()
-        : objetosMapaCargados(false), mapaBaseCargado(false)
-    {
-        srand(static_cast<unsigned>(time(0)));
-
-        mapaBaseCargado = texturaMapaBase.loadFromFile("assets/images/Mapa.png");
-        if (!mapaBaseCargado)
-        {
-            std::cout << "Error: no se pudo cargar assets/images/Mapa.png" << std::endl;
-        }
-
-        sf::Image imagenObjetosMapa;
-        objetosMapaCargados = imagenObjetosMapa.loadFromFile("assets/images/Objetos del mapa.png");
-        if (objetosMapaCargados)
-        {
-            texturaObjetosMapa.loadFromImage(imagenObjetosMapa);
-            calcularRectsObjetos(imagenObjetosMapa);
-        }
-        else
-        {
-            std::cout << "Error: no se pudo cargar assets/images/Objetos del mapa.png" << std::endl;
-        }
-
-        inicializarGrid();
-    }
-
-    ~Mapa()
-    {
-        limpiarFisicas();
-    }
-
-    void inicializarGrid()
-    {
-        // Inicializar matriz
-        for (int i = 0; i < 13; i++)
-        {
-            for (int j = 0; j < 15; j++)
-            {
-                // Bordes del mapa
-                if (i == 0 || i == 12 || j == 0 || j == 14)
-                {
-                    grid[i][j] = INDESTRUCTIBLE;
-                }
-                // Pilares fijos (filas pares Y columnas pares)
-                else if (i % 2 == 0 && j % 2 == 0)
-                {
-                    grid[i][j] = INDESTRUCTIBLE;
-                }
-                // Celdas de inicio del jugador: siempre VACIO
-                else if ((i == 1 && j == 1) || (i == 1 && j == 2) || (i == 2 && j == 1))
-                {
-                    grid[i][j] = VACIO;
-                }
-                // Celdas de spawn de enemigos: siempre VACIO
-                else if ((i == 11 && j == 1) || (i == 1 && j == 13) || (i == 11 && j == 13))
-                {
-                    grid[i][j] = VACIO;
-                }
-                // Resto: 40% probabilidad de DESTRUCTIBLE
-                else
-                {
-                    int aleatorio = rand() % 100;
-                    if (aleatorio < 40)
-                    {
-                        grid[i][j] = DESTRUCTIBLE;
-                    }
-                    else
-                    {
-                        grid[i][j] = VACIO;
-                    }
-                }
-            }
-        }
-    }
-
-    void generarFisicas(PhysicsSpace& physics)
-    {
-        limpiarFisicas();
-
-        // Recorrer grid y crear cuerpos estáticos para muros
-        for (int i = 0; i < 13; i++)
-        {
-            for (int j = 0; j < 15; j++)
-            {
-                if (grid[i][j] == INDESTRUCTIBLE || grid[i][j] == DESTRUCTIBLE)
-                {
-                    // Posición en píxeles: centro de la celda
-                    float posX = j * 64.0f + 32.0f;
-                    float posY = i * 64.0f + 32.0f;
-
-                    // Crear cuerpo estático en Box2D
-                    b2BodyId bodyId = physics.createStaticBody(posX, posY, WALL_HITBOX_SIZE, WALL_HITBOX_SIZE);
-                    
-                    // Guardar el ID en el map (fila, columna) -> b2BodyId
-                    bodiesMap[{i, j}] = bodyId;
-                }
-            }
-        }
-    }
-
-    void draw(sf::RenderWindow& window)
-    {
-        if (mapaBaseCargado)
-        {
-            sf::Sprite fondo;
-            sf::Vector2u size = texturaMapaBase.getSize();
-            fondo.setTexture(texturaMapaBase);
-            fondo.setScale(960.0f / size.x, 832.0f / size.y);
-            fondo.setPosition(0.0f, 0.0f);
-            window.draw(fondo);
-        }
-
-        for (int i = 0; i < 13; i++)
-        {
-            for (int j = 0; j < 15; j++)
-            {
-                if (grid[i][j] != VACIO)
-                {
-                    bool esBorde = (i == 0 || i == 12 || j == 0 || j == 14);
-                    if (mapaBaseCargado && esBorde)
-                    {
-                        continue;
-                    }
-
-                    if (objetosMapaCargados)
-                    {
-                        dibujarObjetoMapa(window, i, j, grid[i][j]);
-                        continue;
-                    }
-
-                    sf::RectangleShape celda(sf::Vector2f(64.0f, 64.0f));
-
-                    // Color según tipo
-                    if (grid[i][j] == INDESTRUCTIBLE)
-                    {
-                        celda.setFillColor(sf::Color(80, 80, 80));  // Gris oscuro
-                    }
-                    else if (grid[i][j] == DESTRUCTIBLE)
-                    {
-                        celda.setFillColor(sf::Color(139, 90, 43));  // Marrón/Ladrillo
-                    }
-
-                    celda.setPosition(j * 64.0f, i * 64.0f);
-                    window.draw(celda);
-                }
-            }
-        }
-    }
-
-    int obtenerTipoCelda(int fila, int columna) const
-    {
-        if (fila < 0 || fila >= 13 || columna < 0 || columna >= 15)
-        {
-            return INDESTRUCTIBLE;  // Fuera de límites = muro
-        }
-        return grid[fila][columna];
-    }
-
-    void destruirBloque(int fila, int columna, std::vector<PowerUp>* pItems = nullptr)
-    {
-        // Verificar límites
-        if (fila < 0 || fila >= 13 || columna < 0 || columna >= 15)
-        {
-            return;
-        }
-
-        // Solo destruir bloques DESTRUCTIBLES
-        if (grid[fila][columna] == DESTRUCTIBLE)
-        {
-            grid[fila][columna] = VACIO;
-
-            // Generar item con 30% de probabilidad
-            if (pItems != nullptr)
-            {
-                int aleatorio = rand() % 100;
-                if (aleatorio < 30)
-                {
-                    PowerUp nuevoItem(fila, columna);
-                    pItems->push_back(nuevoItem);
-                }
-            }
-
-            // Buscar y destruir el cuerpo físico en Box2D
-            auto it = bodiesMap.find({fila, columna});
-            if (it != bodiesMap.end())
-            {
-                b2BodyId bodyId = it->second;
-                if (b2Body_IsValid(bodyId))
-                {
-                    b2DestroyBody(bodyId);
-                }
-                bodiesMap.erase(it);
-            }
-        }
-    }
-
-    // Getter para consultar el tipo de celda (FASE 6)
-    int getCellType(int fila, int col) const
-    {
-        if (fila >= 0 && fila < 13 && col >= 0 && col < 15)
-            return grid[fila][col];
-        return 1;  // Retorna INDESTRUCTIBLE si está fuera de rango
-    }
-
-private:
-    void limpiarFisicas()
-    {
-        for (auto& par : bodiesMap)
-        {
-            b2BodyId bodyId = par.second;
-            if (b2Body_IsValid(bodyId))
-            {
-                b2DestroyBody(bodyId);
-            }
-        }
-
-        bodiesMap.clear();
-    }
-
-    void calcularRectsObjetos(const sf::Image& imagen)
-    {
-        (void)imagen;
-        const int columnas = 9;
-        const int filas = 4;
-        const int rects[filas][columnas][4] = {
-            {
-                {0, 130, 139, 183}, {139, 174, 107, 139}, {279, 188, 115, 125},
-                {422, 179, 116, 134}, {564, 189, 126, 124}, {717, 149, 117, 164},
-                {863, 174, 97, 139}, {988, 203, 117, 110}, {1127, 161, 113, 152}
-            },
-            {
-                {0, 407, 139, 205}, {139, 449, 107, 141}, {279, 461, 116, 133},
-                {422, 448, 119, 146}, {564, 461, 126, 132}, {718, 396, 113, 200},
-                {861, 440, 100, 147}, {988, 454, 116, 134}, {1124, 428, 109, 163}
-            },
-            {
-                {0, 668, 139, 271}, {139, 690, 139, 162}, {278, 703, 117, 147},
-                {421, 697, 119, 152}, {563, 707, 127, 142}, {716, 661, 118, 278},
-                {860, 690, 102, 164}, {986, 701, 117, 145}, {1119, 673, 122, 266}
-            },
-            {
-                {8, 939, 131, 188}, {139, 946, 139, 157}, {278, 954, 114, 148},
-                {418, 948, 120, 152}, {563, 961, 128, 142}, {712, 939, 122, 166},
-                {834, 940, 127, 165}, {989, 951, 114, 148}, {1121, 939, 113, 169}
-            }
-        };
-
-        rectsObjetos.clear();
-        rectsObjetos.resize(columnas * filas);
-
-        for (int fila = 0; fila < filas; fila++)
-        {
-            for (int columna = 0; columna < columnas; columna++)
-            {
-                rectsObjetos[fila * columnas + columna] = sf::IntRect(
-                    rects[fila][columna][0],
-                    rects[fila][columna][1],
-                    rects[fila][columna][2],
-                    rects[fila][columna][3]
-                );
-            }
-        }
-    }
-
-    int obtenerFilaTema(int fila, int columna) const
-    {
-        if (fila < 6 && columna < 7)
-            return 0;
-        if (fila < 6)
-            return 1;
-        if (columna < 7)
-            return 3;
-        return 2;
-    }
-
-    int obtenerColumnaObjeto(int fila, int columna, int tipo) const
-    {
-        if (tipo == DESTRUCTIBLE)
-        {
-            const int opcionesDestructibles[5] = {1, 2, 4, 7, 8};
-            return opcionesDestructibles[(fila * 3 + columna * 5) % 5];
-        }
-
-        return 3;
-    }
-
-    void dibujarObjetoMapa(sf::RenderWindow& window, int fila, int columna, int tipo)
-    {
-        const int columnas = 9;
-        int filaTema = obtenerFilaTema(fila, columna);
-        int columnaObjeto = obtenerColumnaObjeto(fila, columna, tipo);
-        int indice = filaTema * columnas + columnaObjeto;
-
-        if (indice < 0 || indice >= static_cast<int>(rectsObjetos.size()))
-            return;
-
-        sf::IntRect rect = rectsObjetos[indice];
-        sf::Sprite objeto;
-        objeto.setTexture(texturaObjetosMapa);
-        objeto.setTextureRect(rect);
-        objeto.setOrigin(rect.width / 2.0f, rect.height / 2.0f);
-        objeto.setScale(MAP_CELL_SIZE / rect.width, MAP_CELL_SIZE / rect.height);
-        objeto.setPosition(columna * 64.0f + 32.0f, fila * 64.0f + 32.0f);
-        window.draw(objeto);
-    }
-
-    int grid[13][15];
-    std::map<std::pair<int, int>, b2BodyId> bodiesMap;  // Mapeo (fila, col) -> b2BodyId
-    sf::Texture texturaMapaBase;
-    sf::Texture texturaObjetosMapa;
-    std::vector<sf::IntRect> rectsObjetos;
-    bool mapaBaseCargado;
-    bool objetosMapaCargados;
-};
-
-// ============== FIN MAPA ==============
+#include "Mapa.cpp"
 
 // ============== EXPLOSIÓN (FASE 3: Explosiones y Destrucción) ==============
 class Explosion
@@ -950,6 +627,17 @@ public:
     }
 
     bool isActiva() const { return activa; }
+
+    void destruirFisica()
+    {
+        if (b2Body_IsValid(bodyId))
+        {
+            b2DestroyBody(bodyId);
+        }
+
+        bodyId = b2_nullBodyId;
+        shapeId = b2_nullShapeId;
+    }
 
     int getFila() const { return fila; }
     int getColumna() const { return columna; }
@@ -1272,11 +960,13 @@ public:
 
     void destruir(PhysicsSpace& physics)
     {
+        (void)physics;
         vivo = false;
         if (b2Body_IsValid(bodyId))
         {
             b2DestroyBody(bodyId);
         }
+        bodyId = b2_nullBodyId;
     }
 
     bool isVivo() const { return vivo; }
@@ -1403,10 +1093,12 @@ public:
 
     void destruir(PhysicsSpace& physics)
     {
+        (void)physics;
         if (b2Body_IsValid(bodyId))
         {
             b2DestroyBody(bodyId);
         }
+        bodyId = b2_nullBodyId;
     }
 
     void draw(sf::RenderWindow& window)
@@ -1452,8 +1144,23 @@ void cargarNivel(int nivel, Mapa& mapa, Knight& knight, std::vector<Enemigo>& en
                  std::vector<PowerUp>& items, std::vector<Boss>& jefes, PhysicsSpace& physics)
 {
     // Limpiar listas
-    enemigos.clear();
+    for (auto& bomba : bombas)
+    {
+        bomba.destruirFisica();
+    }
+
+    for (auto& enemigo : enemigos)
+    {
+        enemigo.destruir(physics);
+    }
+
+    for (auto& jefe : jefes)
+    {
+        jefe.destruir(physics);
+    }
+
     bombas.clear();
+    enemigos.clear();
     explosiones.clear();
     items.clear();
     jefes.clear();
