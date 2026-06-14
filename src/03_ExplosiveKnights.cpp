@@ -459,10 +459,22 @@ public:
         : objetosMapaCargados(false), mapaBaseCargado(false)
     {
         srand(static_cast<unsigned>(time(0)));
-        mapaBaseCargado = texturaMapaBase.loadFromFile("assets/images/Mpa.png");
+        mapaBaseCargado = texturaMapaBase.loadFromFile("assets/images/Mapa.png");
         if (!mapaBaseCargado)
         {
-            std::cout << "Error: no se pudo cargar assets/images/Mpa.png" << std::endl;
+            std::cout << "Error: no se pudo cargar assets/images/Mapa.png" << std::endl;
+        }
+
+        sf::Image imagenObjetosMapa;
+        objetosMapaCargados = imagenObjetosMapa.loadFromFile("assets/images/Objetos del mapa.png");
+        if (objetosMapaCargados)
+        {
+            texturaObjetosMapa.loadFromImage(imagenObjetosMapa);
+            calcularRectsObjetos(imagenObjetosMapa);
+        }
+        else
+        {
+            std::cout << "Error: no se pudo cargar assets/images/Objetos del mapa.png" << std::endl;
         }
         inicializarGrid();
     }
@@ -471,17 +483,17 @@ public:
     {
         const std::string layout[13] = {
             "111111111111111",
-            "100000000000001",
-            "100000000000001",
-            "100000000000001",
-            "100000000000001",
-            "100000000000001",
-            "100000000000001",
-            "100000000000001",
-            "100000000000001",
-            "100000000000001",
-            "100000000000001",
-            "100000000000001",
+            "100022120220001",
+            "101010101010101",
+            "102012222210201",
+            "101010101010101",
+            "122220000222221",
+            "101000000000101",
+            "122220000222221",
+            "101010101010101",
+            "102012222210201",
+            "101010101010101",
+            "100022120220001",
             "111111111111111"
         };
 
@@ -549,13 +561,20 @@ public:
         {
             for (int j = 0; j < 15; j++)
             {
-                if (mapaBaseCargado)
-                {
-                    continue;
-                }
-
                 if (grid[i][j] != VACIO)
                 {
+                    bool esBorde = (i == 0 || i == 12 || j == 0 || j == 14);
+                    if (mapaBaseCargado && esBorde)
+                    {
+                        continue;
+                    }
+
+                    if (objetosMapaCargados)
+                    {
+                        dibujarObjetoMapa(window, i, j, grid[i][j]);
+                        continue;
+                    }
+
                     sf::RectangleShape celda(sf::Vector2f(64.0f, 64.0f));
 
                     // Color según tipo
@@ -631,10 +650,99 @@ public:
     }
 
 private:
+    void calcularRectsObjetos(const sf::Image& imagen)
+    {
+        (void)imagen;
+        const int columnas = 9;
+        const int filas = 4;
+        const int rects[filas][columnas][4] = {
+            {
+                {0, 130, 139, 183}, {139, 174, 107, 139}, {279, 188, 115, 125},
+                {422, 179, 116, 134}, {564, 189, 126, 124}, {717, 149, 117, 164},
+                {863, 174, 97, 139}, {988, 203, 117, 110}, {1127, 161, 113, 152}
+            },
+            {
+                {0, 407, 139, 205}, {139, 449, 107, 141}, {279, 461, 116, 133},
+                {422, 448, 119, 146}, {564, 461, 126, 132}, {718, 396, 113, 200},
+                {861, 440, 100, 147}, {988, 454, 116, 134}, {1124, 428, 109, 163}
+            },
+            {
+                {0, 668, 139, 271}, {139, 690, 139, 162}, {278, 703, 117, 147},
+                {421, 697, 119, 152}, {563, 707, 127, 142}, {716, 661, 118, 278},
+                {860, 690, 102, 164}, {986, 701, 117, 145}, {1119, 673, 122, 266}
+            },
+            {
+                {8, 939, 131, 188}, {139, 946, 139, 157}, {278, 954, 114, 148},
+                {418, 948, 120, 152}, {563, 961, 128, 142}, {712, 939, 122, 166},
+                {834, 940, 127, 165}, {989, 951, 114, 148}, {1121, 939, 113, 169}
+            }
+        };
+
+        rectsObjetos.clear();
+        rectsObjetos.resize(columnas * filas);
+
+        for (int fila = 0; fila < filas; fila++)
+        {
+            for (int columna = 0; columna < columnas; columna++)
+            {
+                rectsObjetos[fila * columnas + columna] = sf::IntRect(
+                    rects[fila][columna][0],
+                    rects[fila][columna][1],
+                    rects[fila][columna][2],
+                    rects[fila][columna][3]
+                );
+            }
+        }
+    }
+
+    int obtenerFilaTema(int fila, int columna) const
+    {
+        if (fila < 6 && columna < 7)
+            return 0; // fuego
+        if (fila < 6)
+            return 1; // rayo/azul
+        if (columna < 7)
+            return 3; // sombra/morado
+        return 2;     // naturaleza/verde
+    }
+
+    int obtenerColumnaObjeto(int fila, int columna, int tipo) const
+    {
+        if (tipo == DESTRUCTIBLE)
+        {
+            const int opcionesDestructibles[5] = {1, 2, 4, 7, 8};
+            return opcionesDestructibles[(fila * 3 + columna * 5) % 5];
+        }
+
+        return 3; // bloque de piedra indestructible
+    }
+
+    void dibujarObjetoMapa(sf::RenderWindow& window, int fila, int columna, int tipo)
+    {
+        const int columnas = 9;
+        int filaTema = obtenerFilaTema(fila, columna);
+        int columnaObjeto = obtenerColumnaObjeto(fila, columna, tipo);
+        int indice = filaTema * columnas + columnaObjeto;
+
+        if (indice < 0 || indice >= static_cast<int>(rectsObjetos.size()))
+            return;
+
+        sf::IntRect rect = rectsObjetos[indice];
+        sf::Sprite objeto;
+        objeto.setTexture(texturaObjetosMapa);
+        objeto.setTextureRect(rect);
+        objeto.setOrigin(rect.width / 2.0f, rect.height / 2.0f);
+
+        objeto.setScale(MAP_CELL_SIZE / rect.width, MAP_CELL_SIZE / rect.height);
+        objeto.setPosition(columna * 64.0f + 32.0f, fila * 64.0f + 32.0f);
+        window.draw(objeto);
+    }
+
     int grid[13][15];
     std::map<std::pair<int, int>, b2BodyId> bodiesMap;  // Mapeo (fila, col) -> b2BodyId
     sf::Texture texturaMapaBase;
     sf::Texture texturaObjetosMapa;
+    std::vector<sf::IntRect> rectsObjetos;
     bool mapaBaseCargado;
     bool objetosMapaCargados;
 };
@@ -647,7 +755,7 @@ class Explosion
 public:
     Explosion(int centroFila, int centroCol, Mapa& mapa, int rango = 2, std::vector<PowerUp>* pItems = nullptr,
               sf::Color colorExplosion = sf::Color(255, 165, 0))
-        : activa(true), color(colorExplosion), pListaItems(pItems)
+        : activa(true), centroFila(centroFila), centroCol(centroCol), color(colorExplosion), pListaItems(pItems)
     {
         // Añadir el centro
         celdasAfectadas.push_back({centroFila, centroCol});
@@ -774,10 +882,38 @@ public:
         {
             for (const auto& celda : celdasAfectadas)
             {
-                sf::RectangleShape fuego(sf::Vector2f(64.0f, 64.0f));
+                float posX = celda.y * 64.0f + 32.0f;
+                float posY = celda.x * 64.0f + 32.0f;
+                bool esCentro = (celda.x == centroFila && celda.y == centroCol);
+                bool horizontal = (celda.x == centroFila);
+
+                sf::RectangleShape fuego;
+                if (esCentro)
+                {
+                    fuego.setSize(sf::Vector2f(42.0f, 42.0f));
+                }
+                else if (horizontal)
+                {
+                    fuego.setSize(sf::Vector2f(64.0f, 24.0f));
+                }
+                else
+                {
+                    fuego.setSize(sf::Vector2f(24.0f, 64.0f));
+                }
+
+                fuego.setOrigin(fuego.getSize().x / 2.0f, fuego.getSize().y / 2.0f);
                 fuego.setFillColor(color);
-                fuego.setPosition(celda.y * 64.0f, celda.x * 64.0f);
+                fuego.setPosition(posX, posY);
                 window.draw(fuego);
+
+                if (esCentro)
+                {
+                    sf::CircleShape nucleo(18.0f);
+                    nucleo.setOrigin(18.0f, 18.0f);
+                    nucleo.setFillColor(sf::Color(color.r, color.g, color.b, 230));
+                    nucleo.setPosition(posX, posY);
+                    window.draw(nucleo);
+                }
             }
         }
     }
@@ -790,6 +926,8 @@ private:
     std::vector<sf::Vector2i> celdasAfectadas;
     sf::Clock temporizador;
     bool activa;
+    int centroFila;
+    int centroCol;
     sf::Color color;
     std::vector<PowerUp>* pListaItems;
 };
@@ -1506,7 +1644,7 @@ int main()
     // Vector de jefes (FASE 6)
     std::vector<Boss> listaJefes;
 
-    std::vector<std::string> nombresModos = {"ARCADE", "MULTIJUGADOR"};
+    std::vector<std::string> nombresModos = {"ARCADE", "VERSUS"};
     std::vector<std::string> nombresCaballeros = {"VERDE", "AZUL", "ROJO", "NEGRO"};
     std::vector<std::string> rutasCaballeros = {
         "assets/images/verde_spritesheet.png",
@@ -1534,6 +1672,13 @@ int main()
         {
             std::cout << "Error: no se pudo cargar " << rutasCaballeros[i] << std::endl;
         }
+    }
+
+    sf::Texture texturaPantallaInicio;
+    bool pantallaInicioCargada = texturaPantallaInicio.loadFromFile("assets/images/Pantalla de inicio.png");
+    if (!pantallaInicioCargada)
+    {
+        std::cout << "Error: no se pudo cargar assets/images/Pantalla de inicio.png" << std::endl;
     }
 
     // SISTEMA DE AUDIO (FASE 1)
@@ -1616,13 +1761,28 @@ int main()
             {
                 if (estadoActual == MENU)
                 {
-                    if (event.key.code == sf::Keyboard::Up || event.key.code == sf::Keyboard::Down)
+                    if (event.key.code == sf::Keyboard::Up)
                     {
-                        modoSeleccionado = 1 - modoSeleccionado;
+                        modoSeleccionado--;
+                        if (modoSeleccionado < 0)
+                            modoSeleccionado = 2;
+                    }
+                    else if (event.key.code == sf::Keyboard::Down)
+                    {
+                        modoSeleccionado++;
+                        if (modoSeleccionado > 2)
+                            modoSeleccionado = 0;
                     }
                     else if (event.key.code == sf::Keyboard::Return)
                     {
-                        estadoActual = SELECCION_PERSONAJE;
+                        if (modoSeleccionado == 2)
+                        {
+                            window.close();
+                        }
+                        else
+                        {
+                            estadoActual = SELECCION_PERSONAJE;
+                        }
                     }
                 }
                 else if (estadoActual == SELECCION_PERSONAJE)
@@ -1701,11 +1861,67 @@ int main()
             }
         }
 
+        if (!window.isOpen())
+        {
+            break;
+        }
+
         if (estadoActual == MENU || estadoActual == SELECCION_PERSONAJE)
         {
             window.clear(sf::Color(28, 28, 38));
 
-            if (fuenteCargada)
+            if (estadoActual == MENU)
+            {
+                if (pantallaInicioCargada)
+                {
+                    sf::Sprite fondoInicio;
+                    sf::Vector2u size = texturaPantallaInicio.getSize();
+                    float scale = 960.0f / size.x;
+                    float scaledHeight = size.y * scale;
+                    fondoInicio.setTexture(texturaPantallaInicio);
+                    fondoInicio.setScale(scale, scale);
+                    fondoInicio.setPosition(0.0f, (832.0f - scaledHeight) / 2.0f);
+                    window.draw(fondoInicio);
+
+                    float selectorY[3] = {548.0f, 626.0f, 700.0f};
+                    float selectorWidth[3] = {360.0f, 290.0f, 190.0f};
+                    float sourceToScreen = scale;
+                    float offsetY = (832.0f - scaledHeight) / 2.0f;
+
+                    sf::RectangleShape selector(sf::Vector2f(selectorWidth[modoSeleccionado] * sourceToScreen, 54.0f * sourceToScreen));
+                    selector.setOrigin(selector.getSize().x / 2.0f, selector.getSize().y / 2.0f);
+                    selector.setPosition(480.0f, offsetY + selectorY[modoSeleccionado] * sourceToScreen);
+                    selector.setFillColor(sf::Color(0, 0, 0, 90));
+                    selector.setOutlineColor(sf::Color(255, 190, 60));
+                    selector.setOutlineThickness(3.0f);
+                    window.draw(selector);
+
+                    sf::CircleShape flechaIzq(9.0f, 3);
+                    flechaIzq.setOrigin(9.0f, 9.0f);
+                    flechaIzq.setFillColor(sf::Color(255, 190, 60));
+                    flechaIzq.setRotation(90.0f);
+                    flechaIzq.setPosition(selector.getPosition().x - selector.getSize().x / 2.0f - 22.0f, selector.getPosition().y);
+                    window.draw(flechaIzq);
+
+                    sf::CircleShape flechaDer(9.0f, 3);
+                    flechaDer.setOrigin(9.0f, 9.0f);
+                    flechaDer.setFillColor(sf::Color(255, 190, 60));
+                    flechaDer.setRotation(-90.0f);
+                    flechaDer.setPosition(selector.getPosition().x + selector.getSize().x / 2.0f + 22.0f, selector.getPosition().y);
+                    window.draw(flechaDer);
+                }
+                else if (fuenteCargada)
+                {
+                    sf::Text aviso;
+                    aviso.setFont(fuente);
+                    aviso.setCharacterSize(32);
+                    aviso.setFillColor(sf::Color::White);
+                    aviso.setString("Explosive Knights\nEnter: iniciar");
+                    aviso.setPosition(260.0f, 320.0f);
+                    window.draw(aviso);
+                }
+            }
+            else if (fuenteCargada)
             {
                 sf::Text titulo;
                 titulo.setFont(fuente);
@@ -1715,37 +1931,6 @@ int main()
                 titulo.setPosition(960.0f / 2.0f - titulo.getLocalBounds().width / 2.0f, 70.0f);
                 window.draw(titulo);
 
-                if (estadoActual == MENU)
-                {
-                    sf::Text subtitulo;
-                    subtitulo.setFont(fuente);
-                    subtitulo.setCharacterSize(30);
-                    subtitulo.setFillColor(sf::Color(220, 220, 220));
-                    subtitulo.setString("Elige modo de juego");
-                    subtitulo.setPosition(960.0f / 2.0f - subtitulo.getLocalBounds().width / 2.0f, 180.0f);
-                    window.draw(subtitulo);
-
-                    for (int i = 0; i < static_cast<int>(nombresModos.size()); i++)
-                    {
-                        sf::Text opcion;
-                        opcion.setFont(fuente);
-                        opcion.setCharacterSize(36);
-                        opcion.setFillColor(i == modoSeleccionado ? sf::Color::Yellow : sf::Color::White);
-                        opcion.setString((i == modoSeleccionado ? "> " : "  ") + nombresModos[i]);
-                        opcion.setPosition(960.0f / 2.0f - opcion.getLocalBounds().width / 2.0f, 280.0f + i * 70.0f);
-                        window.draw(opcion);
-                    }
-
-                    sf::Text ayuda;
-                    ayuda.setFont(fuente);
-                    ayuda.setCharacterSize(22);
-                    ayuda.setFillColor(sf::Color(180, 180, 180));
-                    ayuda.setString("Arriba/Abajo: cambiar | Enter: continuar");
-                    ayuda.setPosition(960.0f / 2.0f - ayuda.getLocalBounds().width / 2.0f, 680.0f);
-                    window.draw(ayuda);
-                }
-                else
-                {
                     sf::Text subtitulo;
                     subtitulo.setFont(fuente);
                     subtitulo.setCharacterSize(30);
@@ -1816,7 +2001,6 @@ int main()
                     ayuda.setString(modoSeleccionado == 1 ? "P1: Izq/Der | P2: A/D | Enter: jugar | Esc: volver" : "Izquierda/Derecha: cambiar | Enter: jugar | Esc: volver");
                     ayuda.setPosition(960.0f / 2.0f - ayuda.getLocalBounds().width / 2.0f, 690.0f);
                     window.draw(ayuda);
-                }
             }
 
             window.display();
