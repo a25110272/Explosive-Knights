@@ -163,16 +163,15 @@ Knight::Knight(sf::Vector2f position, PhysicsSpace& physics)
       physicsSpace(physics),
       maxBombas(1),
       rangoFuego(1),
-      speed(10.0f),
-      speedOriginal(10.0f),
+      speed(6.5f),
+      speedOriginal(6.5f),
       vidas(3),
       tiempoInvulnerable(0.0f)
 {
-    bodyId = physicsSpace.createDynamicBody(
+    bodyId = physicsSpace.createDynamicCircleBody(
         position.x,
         position.y,
-        KNIGHT_HITBOX_SIZE,
-        KNIGHT_HITBOX_SIZE
+        KNIGHT_COLLISION_RADIUS
     );
 
     posicionOriginal = position;

@@ -29,7 +29,10 @@ enum EstadoJuego
 const float PIXELS_PER_METER = 30.0f;
 const float MAP_CELL_SIZE = 64.0f;
 const float WALL_HITBOX_SIZE = 56.0f;
-const float KNIGHT_HITBOX_SIZE = 34.0f;
+const float KNIGHT_HITBOX_SIZE = 40.0f;
+const float KNIGHT_COLLISION_RADIUS = 15.0f;
+const float KNIGHT_DAMAGE_HITBOX_SIZE = 32.0f;
+const float FIRE_DAMAGE_MARGIN = 10.0f;
 const float ENEMY_HITBOX_SIZE = 36.0f;
 const uint32_t COLLISION_DEFAULT = 0x0001;
 const uint32_t COLLISION_PLAYER = 0x0002;
@@ -99,6 +102,36 @@ public:
         shapeDef.filter.maskBits = maskBits;
 
         b2CreatePolygonShape(bodyId, &shapeDef, &polygon);
+
+        return bodyId;
+    }
+
+    b2BodyId createDynamicCircleBody(float x, float y, float radius,
+                                     uint32_t categoryBits = COLLISION_DEFAULT,
+                                     uint32_t maskBits = COLLISION_ALL)
+    {
+        if (!b2World_IsValid(world))
+        {
+            return b2_nullBodyId;
+        }
+
+        b2BodyDef bodyDef = b2DefaultBodyDef();
+        bodyDef.type = b2_dynamicBody;
+        bodyDef.position.x = x / PIXELS_PER_METER;
+        bodyDef.position.y = y / PIXELS_PER_METER;
+        bodyDef.fixedRotation = true;
+
+        b2BodyId bodyId = b2CreateBody(world, &bodyDef);
+
+        b2Circle circle = {{0.0f, 0.0f}, radius / PIXELS_PER_METER};
+
+        b2ShapeDef shapeDef = b2DefaultShapeDef();
+        shapeDef.density = 1.0f;
+        shapeDef.friction = 0.0f;
+        shapeDef.filter.categoryBits = categoryBits;
+        shapeDef.filter.maskBits = maskBits;
+
+        b2CreateCircleShape(bodyId, &shapeDef, &circle);
 
         return bodyId;
     }
@@ -661,15 +694,14 @@ class Knight
 public:
     Knight(sf::Vector2f position, PhysicsSpace& physics)
         : personaje(position), physicsSpace(physics), 
-          maxBombas(1), rangoFuego(1), speed(10.0f),
-          speedOriginal(10.0f), vidas(3), tiempoInvulnerable(0.0f)
+          maxBombas(1), rangoFuego(1), speed(6.5f),
+          speedOriginal(6.5f), vidas(3), tiempoInvulnerable(0.0f)
     {
         // Crear cuerpo dinámico en Box2D v3.0
-        bodyId = physicsSpace.createDynamicBody(
+        bodyId = physicsSpace.createDynamicCircleBody(
             position.x, 
             position.y, 
-            48.0f,   // ancho del hitbox
-            48.0f,   // alto del hitbox
+            KNIGHT_COLLISION_RADIUS,
             COLLISION_PLAYER,
             COLLISION_ALL
         );
@@ -1560,6 +1592,12 @@ int main()
         float pixelYKnight = posKnight.y * PIXELS_PER_METER;
         int filaKnight = static_cast<int>(pixelYKnight / 64.0f);
         int colKnight = static_cast<int>(pixelXKnight / 64.0f);
+        sf::FloatRect knightDamageRect(
+            pixelXKnight - KNIGHT_DAMAGE_HITBOX_SIZE / 2.0f,
+            pixelYKnight - KNIGHT_DAMAGE_HITBOX_SIZE / 2.0f,
+            KNIGHT_DAMAGE_HITBOX_SIZE,
+            KNIGHT_DAMAGE_HITBOX_SIZE
+        );
 
         // Recopilar items
         for (auto& item : listaItems)
@@ -1593,7 +1631,14 @@ int main()
                 const auto& celdasAfectadas = explosion.getCeldasAfectadas();
                 for (const auto& celda : celdasAfectadas)
                 {
-                    if (celda.x == filaKnight && celda.y == colKnight)
+                    sf::FloatRect fireDamageRect(
+                        celda.y * 64.0f + FIRE_DAMAGE_MARGIN,
+                        celda.x * 64.0f + FIRE_DAMAGE_MARGIN,
+                        64.0f - FIRE_DAMAGE_MARGIN * 2.0f,
+                        64.0f - FIRE_DAMAGE_MARGIN * 2.0f
+                    );
+
+                    if (fireDamageRect.intersects(knightDamageRect))
                     {
                         knight.recibirDano(physics);
                         break;
