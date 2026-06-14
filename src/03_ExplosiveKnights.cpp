@@ -19,9 +19,17 @@ enum Direccion
 // Estados del juego (FASE 5)
 enum EstadoJuego
 {
+    MENU,
+    SELECCION_PERSONAJE,
     JUGANDO,
     GAME_OVER,
     VICTORIA
+};
+
+enum ModoJuego
+{
+    ARCADE,
+    MULTIJUGADOR
 };
 
 // ============== PHYSICS ENGINE (Box2D v3.0) ==============
@@ -1072,6 +1080,10 @@ int main()
     // Máquina de estados y nivel (FASE 5)
     EstadoJuego estadoActual = JUGANDO;
     int nivelActual = 1;
+    int modoSeleccionado = 0;
+    int caballeroSeleccionado = 0;
+    int caballeroSeleccionadoP2 = 1;
+    ModoJuego modoActual = ARCADE;
 
     // Instanciar Physics Engine
     PhysicsSpace physics;
@@ -1084,6 +1096,7 @@ int main()
 
     // Instanciar Knight (jugador)
     Knight knight(sf::Vector2f(96.0f, 96.0f), physics);
+    Knight knight2(sf::Vector2f(864.0f, 736.0f), physics);
 
     // Vector de bombas (FASE 2)
     std::vector<Bomba> listaBombas;

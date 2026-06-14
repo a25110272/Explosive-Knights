@@ -305,6 +305,7 @@ void Knight::recolectarItem(int tipo)
 
 void Knight::morir(PhysicsSpace& physics)
 {
+    (void)physics;
     vidas--;
 
     if (vidas > 0)
@@ -323,6 +324,45 @@ void Knight::morir(PhysicsSpace& physics)
         rangoFuego = 1;
         speed = speedOriginal;
     }
+}
+
+void Knight::cambiarSprite(const std::string& ruta)
+{
+    (void)ruta;
+}
+
+void Knight::configurarBomba(const std::string& ruta, sf::Color color)
+{
+    (void)ruta;
+    (void)color;
+}
+
+void Knight::reiniciar(float x, float y)
+{
+    if (b2Body_IsValid(bodyId))
+    {
+        b2Transform transform = {{x / PIXELS_PER_METER, y / PIXELS_PER_METER}, b2Rot_identity};
+        b2Body_SetTransform(bodyId, transform.p, transform.q);
+        b2Body_SetLinearVelocity(bodyId, {0.0f, 0.0f});
+    }
+
+    personaje->setPhysicsPosition(x, y);
+    maxBombas = 1;
+    rangoFuego = 1;
+    speed = speedOriginal;
+    vidas = 3;
+}
+
+void Knight::moverA(float x, float y)
+{
+    if (b2Body_IsValid(bodyId))
+    {
+        b2Transform transform = {{x / PIXELS_PER_METER, y / PIXELS_PER_METER}, b2Rot_identity};
+        b2Body_SetTransform(bodyId, transform.p, transform.q);
+        b2Body_SetLinearVelocity(bodyId, {0.0f, 0.0f});
+    }
+
+    personaje->setPhysicsPosition(x, y);
 }
 
 b2BodyId Knight::getBodyId()
