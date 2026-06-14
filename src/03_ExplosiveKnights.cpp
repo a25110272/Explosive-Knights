@@ -9,6 +9,7 @@
 #include <cmath>
 #include "Mapa.hpp"
 #include "Menu.hpp"
+#include "SeleccionPersonaje.hpp"
 
 enum Direccion
 {
@@ -22,6 +23,7 @@ enum Direccion
 enum EstadoJuego
 {
     MENU_PRINCIPAL,
+    SELECCION_PERSONAJE,
     JUGANDO,
     GAME_OVER,
     VICTORIA
@@ -407,6 +409,7 @@ private:
 
 #include "Mapa.cpp"
 #include "Menu.cpp"
+#include "SeleccionPersonaje.cpp"
 
 // ============== EXPLOSIÓN (FASE 3: Explosiones y Destrucción) ==============
 class Explosion
@@ -1322,6 +1325,9 @@ int main()
 
     Menu menu;
     menu.init();
+    SeleccionPersonaje pantallaSeleccion;
+    pantallaSeleccion.init();
+    int modoSeleccionado = 0;
 
     // SISTEMA DE AUDIO (FASE 1)
     sf::Music musicaFondo;
@@ -1409,18 +1415,43 @@ int main()
 
                     if (opcion == 0)
                     {
+                        modoSeleccionado = opcion;
+                        estadoActual = SELECCION_PERSONAJE;
+                    }
+                    else if (opcion == 1)
+                    {
+                        modoSeleccionado = opcion;
+                        estadoActual = SELECCION_PERSONAJE;
+                    }
+                    else if (opcion == 2)
+                    {
+                        window.close();
+                    }
+                }
+
+                continue;
+            }
+
+            if (estadoActual == SELECCION_PERSONAJE)
+            {
+                pantallaSeleccion.handleInput(event);
+                if (pantallaSeleccion.seleccionConfirmada())
+                {
+                    int personaje = pantallaSeleccion.getPersonajeSeleccionado();
+                    pantallaSeleccion.limpiarConfirmacion();
+                    std::cout << "Personaje seleccionado: " << personaje << std::endl;
+
+                    if (modoSeleccionado == 0)
+                    {
                         estadoActual = JUGANDO;
                         nivelActual = 1;
                         knight.reiniciar(96.0f, 96.0f);
                         cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics);
                     }
-                    else if (opcion == 1)
+                    else if (modoSeleccionado == 1)
                     {
                         std::cout << "Modo Versus no implementado" << std::endl;
-                    }
-                    else if (opcion == 2)
-                    {
-                        window.close();
+                        estadoActual = MENU_PRINCIPAL;
                     }
                 }
 
@@ -1449,6 +1480,15 @@ int main()
         {
             window.clear(sf::Color(24, 28, 38));
             menu.draw(window);
+            window.display();
+            continue;
+        }
+
+        if (estadoActual == SELECCION_PERSONAJE)
+        {
+            pantallaSeleccion.update();
+            window.clear(sf::Color(22, 24, 34));
+            pantallaSeleccion.draw(window);
             window.display();
             continue;
         }

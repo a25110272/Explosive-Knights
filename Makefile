@@ -10,7 +10,7 @@ LIB_PATHS := -LC:/msys64/mingw64/lib
 LIBS := -lsfml-graphics -lsfml-window -lsfml-system -lsfml-audio -lbox2d
 
 # Obtener todos los archivos .cpp en el directorio de origen
-CPP_FILES := $(filter-out $(SRC_DIR)/Knight.cpp $(SRC_DIR)/Mapa.cpp $(SRC_DIR)/Menu.cpp,$(wildcard $(SRC_DIR)/*.cpp))
+CPP_FILES := $(filter-out $(SRC_DIR)/Knight.cpp $(SRC_DIR)/Mapa.cpp $(SRC_DIR)/Menu.cpp $(SRC_DIR)/SeleccionPersonaje.cpp,$(wildcard $(SRC_DIR)/*.cpp))
 
 # Generar los nombres de los archivos .exe en el directorio de destino
 EXE_FILES := $(patsubst $(SRC_DIR)/%.cpp,$(BIN_DIR)/%.exe,$(CPP_FILES))
