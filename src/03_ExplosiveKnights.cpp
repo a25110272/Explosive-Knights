@@ -25,6 +25,10 @@ enum EstadoJuego
 
 // ============== PHYSICS ENGINE (Box2D v3.0) ==============
 const float PIXELS_PER_METER = 30.0f;
+const float MAP_CELL_SIZE = 64.0f;
+const float WALL_HITBOX_SIZE = 56.0f;
+const float KNIGHT_HITBOX_SIZE = 34.0f;
+const float ENEMY_HITBOX_SIZE = 36.0f;
 
 class PhysicsSpace
 {
@@ -82,7 +86,7 @@ public:
 
         b2ShapeDef shapeDef = b2DefaultShapeDef();
         shapeDef.density = 1.0f;
-        shapeDef.friction = 0.3f;
+        shapeDef.friction = 0.0f;
 
         b2CreatePolygonShape(bodyId, &shapeDef, &polygon);
 
@@ -365,51 +369,41 @@ public:
     static const int DESTRUCTIBLE = 2;
 
     Mapa()
+        : objetosMapaCargados(false), mapaBaseCargado(false)
     {
         srand(static_cast<unsigned>(time(0)));
+        mapaBaseCargado = texturaMapaBase.loadFromFile("assets/images/Mpa.png");
+        if (!mapaBaseCargado)
+        {
+            std::cout << "Error: no se pudo cargar assets/images/Mpa.png" << std::endl;
+        }
         inicializarGrid();
     }
 
     void inicializarGrid()
     {
-        // Inicializar matriz
+        const std::string layout[13] = {
+            "111111111111111",
+            "100000000000001",
+            "100000000000001",
+            "100000000000001",
+            "100000000000001",
+            "100000000000001",
+            "100000000000001",
+            "100000000000001",
+            "100000000000001",
+            "100000000000001",
+            "100000000000001",
+            "100000000000001",
+            "111111111111111"
+        };
+
         for (int i = 0; i < 13; i++)
         {
             for (int j = 0; j < 15; j++)
             {
-                // Bordes del mapa
-                if (i == 0 || i == 12 || j == 0 || j == 14)
-                {
-                    grid[i][j] = INDESTRUCTIBLE;
-                }
-                // Pilares fijos (filas pares Y columnas pares)
-                else if (i % 2 == 0 && j % 2 == 0)
-                {
-                    grid[i][j] = INDESTRUCTIBLE;
-                }
-                // Celdas de inicio del jugador: siempre VACIO
-                else if ((i == 1 && j == 1) || (i == 1 && j == 2) || (i == 2 && j == 1))
-                {
-                    grid[i][j] = VACIO;
-                }
-                // Celdas de spawn de enemigos: siempre VACIO
-                else if ((i == 11 && j == 1) || (i == 1 && j == 13) || (i == 11 && j == 13))
-                {
-                    grid[i][j] = VACIO;
-                }
-                // Resto: 40% probabilidad de DESTRUCTIBLE
-                else
-                {
-                    int aleatorio = rand() % 100;
-                    if (aleatorio < 40)
-                    {
-                        grid[i][j] = DESTRUCTIBLE;
-                    }
-                    else
-                    {
-                        grid[i][j] = VACIO;
-                    }
-                }
+                char tile = layout[i][j];
+                grid[i][j] = (tile == '1') ? INDESTRUCTIBLE : (tile == '2') ? DESTRUCTIBLE : VACIO;
             }
         }
     }
@@ -428,7 +422,7 @@ public:
                     float posY = i * 64.0f + 32.0f;
 
                     // Crear cuerpo estático en Box2D
-                    b2BodyId bodyId = physics.createStaticBody(posX, posY, 64.0f, 64.0f);
+                    b2BodyId bodyId = physics.createStaticBody(posX, posY, WALL_HITBOX_SIZE, WALL_HITBOX_SIZE);
                     
                     // Guardar el ID en el map (fila, columna) -> b2BodyId
                     bodiesMap[{i, j}] = bodyId;
@@ -439,10 +433,25 @@ public:
 
     void draw(sf::RenderWindow& window)
     {
+        if (mapaBaseCargado)
+        {
+            sf::Sprite fondo;
+            sf::Vector2u size = texturaMapaBase.getSize();
+            fondo.setTexture(texturaMapaBase);
+            fondo.setScale(960.0f / size.x, 832.0f / size.y);
+            fondo.setPosition(0.0f, 0.0f);
+            window.draw(fondo);
+        }
+
         for (int i = 0; i < 13; i++)
         {
             for (int j = 0; j < 15; j++)
             {
+                if (mapaBaseCargado)
+                {
+                    continue;
+                }
+
                 if (grid[i][j] != VACIO)
                 {
                     sf::RectangleShape celda(sf::Vector2f(64.0f, 64.0f));
@@ -522,6 +531,10 @@ public:
 private:
     int grid[13][15];
     std::map<std::pair<int, int>, b2BodyId> bodiesMap;  // Mapeo (fila, col) -> b2BodyId
+    sf::Texture texturaMapaBase;
+    sf::Texture texturaObjetosMapa;
+    bool mapaBaseCargado;
+    bool objetosMapaCargados;
 };
 
 // ============== FIN MAPA ==============
@@ -760,8 +773,8 @@ public:
         bodyId = physicsSpace.createDynamicBody(
             position.x, 
             position.y, 
-            48.0f,   // ancho del hitbox
-            48.0f    // alto del hitbox
+            KNIGHT_HITBOX_SIZE,
+            KNIGHT_HITBOX_SIZE
         );
         
         posicionOriginal = position;
@@ -959,7 +972,7 @@ public:
         : speed(6.0f), vivo(true), dirActual(ABAJO)
     {
         // Crear cuerpo dinámico en Box2D v3.0
-        bodyId = physics.createDynamicBody(x, y, 48.0f, 48.0f);
+        bodyId = physics.createDynamicBody(x, y, ENEMY_HITBOX_SIZE, ENEMY_HITBOX_SIZE);
 
         // Cargar textura y sprite
         if (!textura.loadFromFile(texturePath))
