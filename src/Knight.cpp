@@ -165,7 +165,8 @@ Knight::Knight(sf::Vector2f position, PhysicsSpace& physics)
       rangoFuego(1),
       speed(10.0f),
       speedOriginal(10.0f),
-      vidas(3)
+      vidas(3),
+      tiempoInvulnerable(0.0f)
 {
     bodyId = physicsSpace.createDynamicBody(
         position.x,
@@ -239,8 +240,17 @@ void Knight::syncWithPhysics()
     }
 }
 
-void Knight::update()
+void Knight::update(float deltaTime)
 {
+    if (tiempoInvulnerable > 0.0f)
+    {
+        tiempoInvulnerable -= deltaTime;
+        if (tiempoInvulnerable < 0.0f)
+        {
+            tiempoInvulnerable = 0.0f;
+        }
+    }
+
     personaje->update();
 }
 
@@ -305,8 +315,19 @@ void Knight::recolectarItem(int tipo)
 
 void Knight::morir(PhysicsSpace& physics)
 {
+    recibirDano(physics);
+}
+
+void Knight::recibirDano(PhysicsSpace& physics)
+{
     (void)physics;
+    if (vidas <= 0 || tiempoInvulnerable > 0.0f)
+    {
+        return;
+    }
+
     vidas--;
+    tiempoInvulnerable = 2.0f;
 
     if (vidas > 0)
     {
@@ -351,6 +372,7 @@ void Knight::reiniciar(float x, float y)
     rangoFuego = 1;
     speed = speedOriginal;
     vidas = 3;
+    tiempoInvulnerable = 0.0f;
 }
 
 void Knight::moverA(float x, float y)

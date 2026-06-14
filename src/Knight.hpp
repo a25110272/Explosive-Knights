@@ -20,12 +20,13 @@ public:
 
     void handleInput();
     void syncWithPhysics();
-    void update();
+    void update(float deltaTime);
     void draw(sf::RenderWindow& window);
 
     void plantarBomba(Mapa& mapa, std::vector<Bomba>& bombas, PhysicsSpace& physics);
     void recolectarItem(int tipo);
     void morir(PhysicsSpace& physics);
+    void recibirDano(PhysicsSpace& physics);
     void cambiarSprite(const std::string& ruta);
     void configurarBomba(const std::string& ruta, sf::Color color);
     void reiniciar(float x, float y);
@@ -47,6 +48,7 @@ private:
     float speedOriginal;
     sf::Vector2f posicionOriginal;
     int vidas;
+    float tiempoInvulnerable;
 };
 
 #endif

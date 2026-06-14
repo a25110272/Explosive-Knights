@@ -662,7 +662,7 @@ public:
     Knight(sf::Vector2f position, PhysicsSpace& physics)
         : personaje(position), physicsSpace(physics), 
           maxBombas(1), rangoFuego(1), speed(10.0f),
-          speedOriginal(10.0f), vidas(3)
+          speedOriginal(10.0f), vidas(3), tiempoInvulnerable(0.0f)
     {
         // Crear cuerpo dinámico en Box2D v3.0
         bodyId = physicsSpace.createDynamicBody(
@@ -743,8 +743,17 @@ public:
         }
     }
 
-    void update()
+    void update(float deltaTime)
     {
+        if (tiempoInvulnerable > 0.0f)
+        {
+            tiempoInvulnerable -= deltaTime;
+            if (tiempoInvulnerable < 0.0f)
+            {
+                tiempoInvulnerable = 0.0f;
+            }
+        }
+
         personaje.update();
     }
 
@@ -817,15 +826,24 @@ public:
 
     void morir(PhysicsSpace& physics)
     {
-        // Restar una vida
-        vidas--;
+        recibirDano(physics);
+    }
 
-        // Si aún hay vidas, teletransportar al inicio
+    void recibirDano(PhysicsSpace& physics)
+    {
+        (void)physics;
+        if (vidas <= 0 || tiempoInvulnerable > 0.0f)
+        {
+            return;
+        }
+
+        vidas--;
+        tiempoInvulnerable = 2.0f;
+
         if (vidas > 0)
         {
-            // Reiniciar posición física al centro de [1][1]
-            float posX = 1.0f * 64.0f + 32.0f;  // Columna 1, centro
-            float posY = 1.0f * 64.0f + 32.0f;  // Fila 1, centro
+            float posX = 1.0f * 64.0f + 32.0f;
+            float posY = 1.0f * 64.0f + 32.0f;
 
             if (b2Body_IsValid(bodyId))
             {
@@ -834,11 +852,27 @@ public:
                 b2Body_SetLinearVelocity(bodyId, {0.0f, 0.0f});
             }
 
-            // Reiniciar stats a valores por defecto
             maxBombas = 1;
             rangoFuego = 1;
             speed = speedOriginal;
         }
+    }
+
+    void reiniciar(float x, float y)
+    {
+        if (b2Body_IsValid(bodyId))
+        {
+            b2Transform transform = {{x / PIXELS_PER_METER, y / PIXELS_PER_METER}, b2Rot_identity};
+            b2Body_SetTransform(bodyId, transform.p, transform.q);
+            b2Body_SetLinearVelocity(bodyId, {0.0f, 0.0f});
+        }
+
+        personaje.setPhysicsPosition(x, y);
+        maxBombas = 1;
+        rangoFuego = 1;
+        speed = speedOriginal;
+        vidas = 3;
+        tiempoInvulnerable = 0.0f;
     }
 
     b2BodyId getBodyId() { return bodyId; }
@@ -857,6 +891,7 @@ private:
     float speedOriginal;
     sf::Vector2f posicionOriginal;
     int vidas;
+    float tiempoInvulnerable;
 };
 
 // ============== FIN KNIGHT - Box2D v3.0 ==============
@@ -1339,6 +1374,7 @@ int main()
                 {
                     estadoActual = JUGANDO;
                     nivelActual = 1;
+                    knight.reiniciar(96.0f, 96.0f);
                     cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics);
                 }
             }
@@ -1354,7 +1390,7 @@ int main()
         knight.syncWithPhysics();
 
         // UPDATE SPRITES
-        knight.update();
+        knight.update(timeStep);
 
         // UPDATE BOMBAS (FASE 2) + EXPLOSIONES (FASE 3)
         for (auto& bomba : listaBombas)
@@ -1484,7 +1520,7 @@ int main()
 
             if (distancia < 64.0f)  // Contacto si distancia < 64px
             {
-                knight.morir(physics);
+                knight.recibirDano(physics);
             }
         }
 
@@ -1559,7 +1595,7 @@ int main()
                 {
                     if (celda.x == filaKnight && celda.y == colKnight)
                     {
-                        knight.morir(physics);
+                        knight.recibirDano(physics);
                         break;
                     }
                 }
@@ -1601,7 +1637,7 @@ int main()
 
                 if (filaEnemigo == filaKnight && colEnemigo == colKnight)
                 {
-                    knight.morir(physics);
+                    knight.recibirDano(physics);
                 }
             }
         }
