@@ -8,6 +8,7 @@
 #include <ctime>
 #include <cmath>
 #include "Mapa.hpp"
+#include "Menu.hpp"
 
 enum Direccion
 {
@@ -20,6 +21,7 @@ enum Direccion
 // Estados del juego (FASE 5)
 enum EstadoJuego
 {
+    MENU_PRINCIPAL,
     JUGANDO,
     GAME_OVER,
     VICTORIA
@@ -404,6 +406,7 @@ private:
 // ============== FIN POWER-UP ==============
 
 #include "Mapa.cpp"
+#include "Menu.cpp"
 
 // ============== EXPLOSIÓN (FASE 3: Explosiones y Destrucción) ==============
 class Explosion
@@ -1291,7 +1294,7 @@ int main()
     window.setFramerateLimit(60);
 
     // Máquina de estados y nivel (FASE 5)
-    EstadoJuego estadoActual = JUGANDO;
+    EstadoJuego estadoActual = MENU_PRINCIPAL;
     int nivelActual = 1;
 
     // Instanciar Physics Engine
@@ -1316,9 +1319,9 @@ int main()
 
     // Vector de jefes (FASE 6)
     std::vector<Boss> listaJefes;
-    
-    // Cargar primer nivel
-    cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics);
+
+    Menu menu;
+    menu.init();
 
     // SISTEMA DE AUDIO (FASE 1)
     sf::Music musicaFondo;
@@ -1395,6 +1398,35 @@ int main()
             {
                 window.close();
             }
+
+            if (estadoActual == MENU_PRINCIPAL)
+            {
+                menu.handleInput(event);
+                if (menu.seleccionConfirmada())
+                {
+                    int opcion = menu.getOpcionSeleccionada();
+                    menu.limpiarConfirmacion();
+
+                    if (opcion == 0)
+                    {
+                        estadoActual = JUGANDO;
+                        nivelActual = 1;
+                        knight.reiniciar(96.0f, 96.0f);
+                        cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics);
+                    }
+                    else if (opcion == 1)
+                    {
+                        std::cout << "Modo Versus no implementado" << std::endl;
+                    }
+                    else if (opcion == 2)
+                    {
+                        window.close();
+                    }
+                }
+
+                continue;
+            }
+
             // Manejar input de Espacio para plantar bomba (FASE 2)
             if (event.type == sf::Event::KeyPressed)
             {
@@ -1411,6 +1443,14 @@ int main()
                     cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics);
                 }
             }
+        }
+
+        if (estadoActual == MENU_PRINCIPAL)
+        {
+            window.clear(sf::Color(24, 28, 38));
+            menu.draw(window);
+            window.display();
+            continue;
         }
 
         // INPUT
