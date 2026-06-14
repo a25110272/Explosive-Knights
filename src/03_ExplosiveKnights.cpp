@@ -403,6 +403,11 @@ public:
         inicializarGrid();
     }
 
+    ~Mapa()
+    {
+        limpiarFisicas();
+    }
+
     void inicializarGrid()
     {
         // Inicializar matriz
@@ -449,6 +454,8 @@ public:
 
     void generarFisicas(PhysicsSpace& physics)
     {
+        limpiarFisicas();
+
         // Recorrer grid y crear cuerpos estáticos para muros
         for (int i = 0; i < 13; i++)
         {
@@ -575,6 +582,20 @@ public:
     }
 
 private:
+    void limpiarFisicas()
+    {
+        for (auto& par : bodiesMap)
+        {
+            b2BodyId bodyId = par.second;
+            if (b2Body_IsValid(bodyId))
+            {
+                b2DestroyBody(bodyId);
+            }
+        }
+
+        bodiesMap.clear();
+    }
+
     void calcularRectsObjetos(const sf::Image& imagen)
     {
         (void)imagen;
@@ -1503,10 +1524,6 @@ int main()
 
     // Instanciar Mapa
     Mapa mapa;
-    
-    // Generar físicas del mapa
-    mapa.generarFisicas(physics);
-
     // Instanciar Knight (jugador)
     Knight knight(sf::Vector2f(96.0f, 96.0f), physics);
 
