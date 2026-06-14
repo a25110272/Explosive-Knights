@@ -30,7 +30,8 @@ public:
         centrarSprite();
 
         sprite.setPosition(position);
-        sprite.setScale(0.25f, 0.25f);
+        float escala = 64.0f / static_cast<float>(frameWidth);
+        sprite.setScale(escala, escala);
     }
 
     void move(float offsetX, float offsetY, Direccion nuevaDireccion)

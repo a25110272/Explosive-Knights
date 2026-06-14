@@ -30,7 +30,7 @@ const float PIXELS_PER_METER = 30.0f;
 const float MAP_CELL_SIZE = 64.0f;
 const float WALL_HITBOX_SIZE = 56.0f;
 const float KNIGHT_HITBOX_SIZE = 40.0f;
-const float KNIGHT_COLLISION_RADIUS = 15.0f;
+const float KNIGHT_COLLISION_RADIUS = 31.0f;
 const float KNIGHT_DAMAGE_HITBOX_SIZE = 32.0f;
 const float FIRE_DAMAGE_MARGIN = 10.0f;
 const float ENEMY_HITBOX_SIZE = 36.0f;
@@ -210,7 +210,8 @@ public:
         sprite.setPosition(position);
 
         // Cambia esto si se ve muy grande o muy pequeño
-        sprite.setScale(0.25f, 0.25f);
+        float escala = MAP_CELL_SIZE / static_cast<float>(frameWidth);
+        sprite.setScale(escala, escala);
     }
 
     void move(float offsetX, float offsetY, Direccion nuevaDireccion)
