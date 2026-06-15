@@ -4,6 +4,7 @@
 #include <box2d/box2d.h>
 #include <vector>
 #include <map>
+#include <string>
 #include <cstdlib>
 #include <ctime>
 #include <cmath>
@@ -179,13 +180,8 @@ class PowerUp;
 class Personaje
 {
 public:
-    Personaje(sf::Vector2f position)
+    Personaje(sf::Vector2f position, const std::string& rutaTextura)
     {
-        if (!textura.loadFromFile("assets/images/verde_spritesheet.png"))
-        {
-            std::cout << "Error: no se pudo cargar assets/images/verde_spritesheet.png" << std::endl;
-        }
-
         direccion = ABAJO;
 
         // CAMBIA ESTOS VALORES SEGÚN EL TAMAÑO DE CADA FRAME
@@ -200,7 +196,7 @@ public:
         // frames 1 a 6 = caminando
         numFrames = 7;
 
-        sprite.setTexture(textura);
+        cambiarTextura(rutaTextura);
 
         sprite.setTextureRect(sf::IntRect(
             0,
@@ -216,6 +212,24 @@ public:
         // Cambia esto si se ve muy grande o muy pequeño
         float escala = MAP_CELL_SIZE / static_cast<float>(frameWidth);
         sprite.setScale(escala, escala);
+    }
+
+    void cambiarTextura(const std::string& rutaTextura)
+    {
+        if (!textura.loadFromFile(rutaTextura))
+        {
+            std::cout << "Error: no se pudo cargar " << rutaTextura << std::endl;
+            return;
+        }
+
+        sprite.setTexture(this->textura);
+        sprite.setTextureRect(sf::IntRect(
+            currentFrame * frameWidth,
+            obtenerFilaDireccion() * frameHeight,
+            frameWidth,
+            frameHeight
+        ));
+        centrarSprite();
     }
 
     void move(float offsetX, float offsetY, Direccion nuevaDireccion)
@@ -699,8 +713,9 @@ private:
 class Knight
 {
 public:
-    Knight(sf::Vector2f position, PhysicsSpace& physics)
-        : personaje(position), physicsSpace(physics), 
+    Knight(sf::Vector2f position, PhysicsSpace& physics,
+           const std::string& rutaTextura = "assets/images/Verde_spritesheet.png")
+        : personaje(position, rutaTextura), physicsSpace(physics), 
           maxBombas(1), rangoFuego(1), speed(6.5f),
           speedOriginal(6.5f), vidas(3), tiempoInvulnerable(0.0f)
     {
@@ -799,6 +814,13 @@ public:
     void draw(sf::RenderWindow& window)
     {
         personaje.draw(window);
+    }
+
+    void cambiarSprite(const std::string& rutaTextura)
+    {
+        personaje.cambiarTextura(rutaTextura);
+        direccionActual = ABAJO;
+        personaje.detenerAnimacion(direccionActual);
     }
 
     void plantarBomba(Mapa& mapa, std::vector<Bomba>& bombas, PhysicsSpace& physics)
@@ -951,9 +973,36 @@ public:
             std::cerr << "Error: No se pudo cargar textura: " << texturePath << std::endl;
         }
 
-        sprite.setTexture(textura);
+        sprite.setTexture(this->textura);
         sprite.setScale(0.25f, 0.25f);
         sprite.setPosition(x - 12.0f, y - 12.0f);  // Centrar sprite
+    }
+
+    Enemigo(const Enemigo& otro)
+        : bodyId(otro.bodyId),
+          sprite(otro.sprite),
+          textura(otro.textura),
+          dirActual(otro.dirActual),
+          speed(otro.speed),
+          vivo(otro.vivo)
+    {
+        sprite.setTexture(this->textura);
+    }
+
+    Enemigo& operator=(const Enemigo& otro)
+    {
+        if (this != &otro)
+        {
+            bodyId = otro.bodyId;
+            sprite = otro.sprite;
+            textura = otro.textura;
+            dirActual = otro.dirActual;
+            speed = otro.speed;
+            vivo = otro.vivo;
+            sprite.setTexture(this->textura);
+        }
+
+        return *this;
     }
 
     void update(Mapa& mapa, PhysicsSpace& physics)
@@ -1087,10 +1136,39 @@ public:
             std::cerr << "Error: No se pudo cargar textura: " << texturePath << std::endl;
         }
 
-        sprite.setTexture(textura);
+        sprite.setTexture(this->textura);
         sprite.setScale(0.5f, 0.5f);
         sprite.setOrigin(sprite.getLocalBounds().width / 2.0f, 
                          sprite.getLocalBounds().height / 2.0f);
+    }
+
+    Boss(const Boss& otro)
+        : bodyId(otro.bodyId),
+          sprite(otro.sprite),
+          textura(otro.textura),
+          hp(otro.hp),
+          cooldownDano(otro.cooldownDano),
+          dirActual(otro.dirActual),
+          speed(otro.speed)
+    {
+        sprite.setTexture(this->textura);
+    }
+
+    Boss& operator=(const Boss& otro)
+    {
+        if (this != &otro)
+        {
+            bodyId = otro.bodyId;
+            sprite = otro.sprite;
+            textura = otro.textura;
+            hp = otro.hp;
+            cooldownDano = otro.cooldownDano;
+            dirActual = otro.dirActual;
+            speed = otro.speed;
+            sprite.setTexture(this->textura);
+        }
+
+        return *this;
     }
 
     void update(Mapa& mapa, PhysicsSpace& physics)
@@ -1259,15 +1337,13 @@ void cargarNivel(int nivel, Mapa& mapa, Knight& knight, std::vector<Enemigo>& en
         // Spawneamos el Boss en el centro del mapa [6][7]
         float bosX = 7.0f * 64.0f + 32.0f;
         float bosY = 6.0f * 64.0f + 32.0f;
-        jefes.emplace_back(bosX, bosY, physics, "assets/images/negro_spritesheet.png");
+        jefes.emplace_back(bosX, bosY, physics, "assets/images/Negro_spritesheet.png");
         std::cout << "NIVEL 3 INICIADO - ¡EL JEFE FINAL HA LLEGADO!" << std::endl;
         return;
     }
 
-    // Spawnear enemigos normales para niveles 1 y 2
-    int cantidadEnemigos = 3;
-    if (nivel == 2)
-        cantidadEnemigos = 5;
+    // Spawnear enemigos normales desactivado temporalmente.
+    int cantidadEnemigos = 0;
 
 
     // Configuración de spawn en esquinas (se repite si hay más enemigos)
@@ -1281,10 +1357,12 @@ void cargarNivel(int nivel, Mapa& mapa, Knight& knight, std::vector<Enemigo>& en
         {13.0f * 64.0f + 32.0f, 6.0f * 64.0f + 32.0f},    // Derecha centro
     };
 
+    /*
     for (int i = 0; i < cantidadEnemigos && i < static_cast<int>(spawnPoints.size()); i++)
     {
-        enemigos.emplace_back(spawnPoints[i].first, spawnPoints[i].second, physics, "assets/images/rojo_spritesheet.png");
+        enemigos.emplace_back(spawnPoints[i].first, spawnPoints[i].second, physics, "assets/images/Rojo_spritesheet.png");
     }
+    */
 
     std::cout << "NIVEL " << nivel << " INICIADO - " << cantidadEnemigos << " ENEMIGOS" << std::endl;
 }
@@ -1438,6 +1516,13 @@ int main()
                 if (pantallaSeleccion.seleccionConfirmada())
                 {
                     int personaje = pantallaSeleccion.getPersonajeSeleccionado();
+                    const std::string rutasPersonajes[4] = {
+                        "assets/images/Verde_spritesheet.png",
+                        "assets/images/Rojo_spritesheet.png",
+                        "assets/images/Azul_spritesheet.png",
+                        "assets/images/Negro_spritesheet.png"
+                    };
+                    knight.cambiarSprite(rutasPersonajes[personaje]);
                     pantallaSeleccion.limpiarConfirmacion();
                     std::cout << "Personaje seleccionado: " << personaje << std::endl;
 
@@ -1655,7 +1740,7 @@ int main()
                 std::cout << "¡VICTORIA! ¡Derrotaste al Jefe Final! - Presiona ENTER para reiniciar" << std::endl;
             }
             // Verificar si ganó el nivel (todos los enemigos muertos) - Niveles 1 y 2
-            else if (listaEnemigos.empty() && nivelActual < 3)
+            else if (false && listaEnemigos.empty() && nivelActual < 3)
             {
                 nivelActual++;
                 std::cout << "¡NIVEL COMPLETADO! Avanzando a NIVEL " << nivelActual << std::endl;

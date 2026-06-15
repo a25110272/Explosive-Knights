@@ -15,7 +15,8 @@ class Personaje;
 class Knight
 {
 public:
-    Knight(sf::Vector2f position, PhysicsSpace& physics);
+    Knight(sf::Vector2f position, PhysicsSpace& physics,
+           const std::string& rutaTextura = "assets/images/Verde_spritesheet.png");
     ~Knight();
 
     void handleInput();

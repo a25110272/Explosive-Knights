@@ -5,20 +5,15 @@
 class Personaje
 {
 public:
-    Personaje(sf::Vector2f position)
+    Personaje(sf::Vector2f position, const std::string& rutaTextura)
     {
-        if (!textura.loadFromFile("assets/images/verde_spritesheet.png"))
-        {
-            std::cout << "Error: no se pudo cargar assets/images/verde_spritesheet.png" << std::endl;
-        }
-
         direccion = ABAJO;
 
         frameWidth = 230;
         frameHeight = 235;
         numFrames = 7;
 
-        sprite.setTexture(textura);
+        cambiarTextura(rutaTextura);
 
         sprite.setTextureRect(sf::IntRect(
             0,
@@ -32,6 +27,24 @@ public:
         sprite.setPosition(position);
         float escala = 64.0f / static_cast<float>(frameWidth);
         sprite.setScale(escala, escala);
+    }
+
+    void cambiarTextura(const std::string& rutaTextura)
+    {
+        if (!textura.loadFromFile(rutaTextura))
+        {
+            std::cout << "Error: no se pudo cargar " << rutaTextura << std::endl;
+            return;
+        }
+
+        sprite.setTexture(this->textura);
+        sprite.setTextureRect(sf::IntRect(
+            currentFrame * frameWidth,
+            obtenerFilaDireccion() * frameHeight,
+            frameWidth,
+            frameHeight
+        ));
+        centrarSprite();
     }
 
     void move(float offsetX, float offsetY, Direccion nuevaDireccion)
@@ -159,8 +172,8 @@ private:
     }
 };
 
-Knight::Knight(sf::Vector2f position, PhysicsSpace& physics)
-    : personaje(std::make_unique<Personaje>(position)),
+Knight::Knight(sf::Vector2f position, PhysicsSpace& physics, const std::string& rutaTextura)
+    : personaje(std::make_unique<Personaje>(position, rutaTextura)),
       physicsSpace(physics),
       maxBombas(1),
       rangoFuego(1),
@@ -349,7 +362,9 @@ void Knight::recibirDano(PhysicsSpace& physics)
 
 void Knight::cambiarSprite(const std::string& ruta)
 {
-    (void)ruta;
+    personaje->cambiarTextura(ruta);
+    direccionActual = ABAJO;
+    personaje->detenerAnimacion(static_cast<Direccion>(direccionActual));
 }
 
 void Knight::configurarBomba(const std::string& ruta, sf::Color color)
