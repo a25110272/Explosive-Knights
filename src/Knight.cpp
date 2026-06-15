@@ -182,7 +182,8 @@ Knight::Knight(sf::Vector2f position, PhysicsSpace& physics, const std::string& 
       vidas(3),
       tiempoInvulnerable(0.0f),
       puedePatear(false),
-      idJugador(idJugador)
+      idJugador(idJugador),
+      rutaTexturaBomba("assets/images/Bomba_Verde.png")
 {
     bodyId = physicsSpace.createDynamicCircleBody(
         position.x,
@@ -325,8 +326,7 @@ void Knight::plantarBomba(Mapa& mapa, std::vector<Bomba>& bombas, PhysicsSpace& 
         return;
     }
 
-    Bomba nuevaBomba(fila, columna, physics);
-    bombas.push_back(nuevaBomba);
+    bombas.emplace_back(fila, columna, physics, rangoFuego, 0, rutaTexturaBomba);
 }
 
 void Knight::recolectarItem(int tipo, bool modoVersus)
@@ -398,8 +398,8 @@ void Knight::cambiarSprite(const std::string& ruta)
 
 void Knight::configurarBomba(const std::string& ruta, sf::Color color)
 {
-    (void)ruta;
     (void)color;
+    rutaTexturaBomba = ruta;
 }
 
 void Knight::reiniciar(float x, float y)

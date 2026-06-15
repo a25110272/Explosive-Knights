@@ -61,6 +61,7 @@ private:
     float tiempoInvulnerable;
     bool puedePatear;
     int idJugador;
+    std::string rutaTexturaBomba;
 };
 
 #endif

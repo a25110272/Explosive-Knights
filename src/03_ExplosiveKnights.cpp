@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <cmath>
+#include <utility>
 #include "Mapa.hpp"
 #include "Menu.hpp"
 #include "SeleccionPersonaje.hpp"
@@ -707,11 +708,13 @@ private:
 class Bomba
 {
 public:
-    Bomba(int fila, int columna, PhysicsSpace& physics, int rangoFuego = 1, int propietario = 0)
+    Bomba(int fila, int columna, PhysicsSpace& physics, int rangoFuego = 1, int propietario = 0,
+          const std::string& rutaTextura = "assets/images/Bomba_Verde.png")
         : fila(fila), columna(columna), activa(true), jugadorEncima(true), solida(false),
           enMovimiento(false), direccionMovimiento(ABAJO), rangoFuego(rangoFuego), propietario(propietario),
-          bodyId(b2_nullBodyId), shapeId(b2_nullShapeId)
+          bodyId(b2_nullBodyId), shapeId(b2_nullShapeId), texturaCargada(false)
     {
+        cargarTextura(rutaTextura);
         // Calcular posición en píxeles: centro de la celda
         float posX = columna * 64.0f + 32.0f;
         float posY = fila * 64.0f + 32.0f;
@@ -740,6 +743,55 @@ public:
 
         // Iniciar temporizador
         temporizador.restart();
+    }
+
+    Bomba(const Bomba&) = delete;
+    Bomba& operator=(const Bomba&) = delete;
+
+    Bomba(Bomba&& otra) noexcept
+        : fila(otra.fila), columna(otra.columna), activa(otra.activa),
+          jugadorEncima(otra.jugadorEncima), solida(otra.solida),
+          enMovimiento(otra.enMovimiento), direccionMovimiento(otra.direccionMovimiento),
+          rangoFuego(otra.rangoFuego), propietario(otra.propietario),
+          bodyId(otra.bodyId), shapeId(otra.shapeId),
+          textura(std::move(otra.textura)), sprite(std::move(otra.sprite)),
+          texturaCargada(otra.texturaCargada), temporizador(std::move(otra.temporizador))
+    {
+        enlazarSpriteATextura();
+        otra.bodyId = b2_nullBodyId;
+        otra.shapeId = b2_nullShapeId;
+        otra.activa = false;
+    }
+
+    Bomba& operator=(Bomba&& otra) noexcept
+    {
+        if (this != &otra)
+        {
+            destruirFisica();
+
+            fila = otra.fila;
+            columna = otra.columna;
+            activa = otra.activa;
+            jugadorEncima = otra.jugadorEncima;
+            solida = otra.solida;
+            enMovimiento = otra.enMovimiento;
+            direccionMovimiento = otra.direccionMovimiento;
+            rangoFuego = otra.rangoFuego;
+            propietario = otra.propietario;
+            bodyId = otra.bodyId;
+            shapeId = otra.shapeId;
+            textura = std::move(otra.textura);
+            sprite = std::move(otra.sprite);
+            texturaCargada = otra.texturaCargada;
+            temporizador = std::move(otra.temporizador);
+            enlazarSpriteATextura();
+
+            otra.bodyId = b2_nullBodyId;
+            otra.shapeId = b2_nullShapeId;
+            otra.activa = false;
+        }
+
+        return *this;
     }
 
     bool update(PhysicsSpace& physics, const std::vector<b2BodyId>& jugadoresBodyId)
@@ -828,6 +880,13 @@ public:
             }
 
             // Dibujar círculo negro (radio 24px)
+            if (texturaCargada)
+            {
+                sprite.setPosition(posX, posY);
+                window.draw(sprite);
+                return;
+            }
+
             sf::CircleShape bomba(24.0f);
             bomba.setFillColor(sf::Color::Black);
             bomba.setPosition(posX - 24.0f, posY - 24.0f);  // Centrar
@@ -935,6 +994,32 @@ public:
     b2BodyId getBodyId() const { return bodyId; }
 
 private:
+    void cargarTextura(const std::string& rutaTextura)
+    {
+        texturaCargada = textura.loadFromFile(rutaTextura);
+        if (!texturaCargada)
+        {
+            std::cout << "Aviso: no se pudo cargar " << rutaTextura << std::endl;
+            return;
+        }
+
+        enlazarSpriteATextura();
+    }
+
+    void enlazarSpriteATextura()
+    {
+        if (!texturaCargada)
+        {
+            return;
+        }
+
+        sprite.setTexture(textura, true);
+        sf::Vector2u size = textura.getSize();
+        sprite.setOrigin(size.x / 2.0f, size.y / 2.0f);
+        float escala = MAP_CELL_SIZE / static_cast<float>(std::max(size.x, size.y));
+        sprite.setScale(escala, escala);
+    }
+
     b2Vec2 obtenerVelocidadDireccion(Direccion direccion) const
     {
         if (direccion == ARRIBA)
@@ -957,6 +1042,9 @@ private:
     int propietario;
     b2BodyId bodyId;
     b2ShapeId shapeId;
+    sf::Texture textura;
+    sf::Sprite sprite;
+    bool texturaCargada;
     sf::Clock temporizador;
 };
 
@@ -975,7 +1063,7 @@ public:
           tiempoBombaExtra(0.0f), tiempoEscudo(0.0f), tiempoFantasma(0.0f),
           tiempoVelocidad(0.0f), bombasExtraRonda(0), velocidadExtraRonda(0.0f),
           fantasmaActivo(false), puedePatear(false), ignorandoDestructibles(false),
-          idJugador(idJugador)
+          idJugador(idJugador), rutaTexturaBomba("assets/images/Bomba_Verde.png")
     {
         // Crear cuerpo dinámico en Box2D v3.0
         bodyId = physicsSpace.createDynamicCircleBody(
@@ -1125,6 +1213,11 @@ public:
         personaje.detenerAnimacion(direccionActual);
     }
 
+    void configurarBomba(const std::string& rutaTextura)
+    {
+        rutaTexturaBomba = rutaTextura;
+    }
+
     void plantarBomba(Mapa& mapa, std::vector<Bomba>& bombas, PhysicsSpace& physics, int propietario = 0)
     {
         // Verificar que no se supere el máximo de bombas
@@ -1163,7 +1256,7 @@ public:
             return;
         }
 
-        bombas.emplace_back(fila, columna, physics, rangoFuego, propietario);
+        bombas.emplace_back(fila, columna, physics, rangoFuego, propietario, rutaTexturaBomba);
     }
 
     void recolectarItem(int tipo, bool modoVersus = false)
@@ -1412,6 +1505,7 @@ private:
     bool puedePatear;
     bool ignorandoDestructibles;
     int idJugador;
+    std::string rutaTexturaBomba;
 };
 
 // ============== FIN KNIGHT - Box2D v3.0 ==============
@@ -2019,6 +2113,23 @@ std::string obtenerRutaGanadorVersus(int personaje)
     return rutas[personaje];
 }
 
+std::string obtenerRutaBombaPersonaje(int personaje)
+{
+    const std::string rutas[4] = {
+        "assets/images/Bomba_Verde.png",
+        "assets/images/Bomba_Roja.png",
+        "assets/images/Bomba_Azul.png",
+        "assets/images/Bomba_Negra.png"
+    };
+
+    if (personaje < 0 || personaje >= 4)
+    {
+        return rutas[0];
+    }
+
+    return rutas[personaje];
+}
+
 sf::Vector2f obtenerCentroBody(b2BodyId bodyId)
 {
     if (!b2Body_IsValid(bodyId))
@@ -2375,6 +2486,8 @@ int main()
 
                     knight.cambiarSprite(pantallaSeleccion.getRutaTexturaPersonaje(personajeP1));
                     knight2.cambiarSprite(pantallaSeleccion.getRutaTexturaPersonaje(personajeP2));
+                    knight.configurarBomba(obtenerRutaBombaPersonaje(personajeP1));
+                    knight2.configurarBomba(obtenerRutaBombaPersonaje(personajeP2));
                     pantallaSeleccion.limpiarConfirmacion();
                     std::cout << "P1 seleccionado: " << personajeP1 << " | P2 seleccionado: " << personajeP2 << std::endl;
 
