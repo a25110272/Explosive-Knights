@@ -82,7 +82,10 @@ void Mapa::generarFisicas(PhysicsSpace& physics)
             {
                 float posX = j * 64.0f + 32.0f;
                 float posY = i * 64.0f + 32.0f;
-                b2BodyId bodyId = physics.createStaticBody(posX, posY, WALL_HITBOX_SIZE, WALL_HITBOX_SIZE);
+                uint32_t categoria = (grid[i][j] == DESTRUCTIBLE || grid[i][j] == DESTRUYENDOSE)
+                    ? COLLISION_DESTRUCTIBLE
+                    : COLLISION_INDESTRUCTIBLE;
+                b2BodyId bodyId = physics.createStaticBody(posX, posY, WALL_HITBOX_SIZE, WALL_HITBOX_SIZE, categoria);
                 bodiesMap[{i, j}] = bodyId;
             }
         }
@@ -176,11 +179,13 @@ void Mapa::update(float deltaTime)
 
         if (bloque->pItems != nullptr)
         {
-            int aleatorio = rand() % 100;
-            if (aleatorio < 30)
+            for (auto& item : *bloque->pItems)
             {
-                PowerUp nuevoItem(bloque->fila, bloque->columna);
-                bloque->pItems->push_back(nuevoItem);
+                if (item.estaOculto() && item.estaEnCelda(bloque->fila, bloque->columna))
+                {
+                    item.revelar();
+                    break;
+                }
             }
         }
 

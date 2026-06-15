@@ -5,6 +5,8 @@
 #include <vector>
 #include <map>
 #include <string>
+#include <array>
+#include <algorithm>
 #include <cstdlib>
 #include <ctime>
 #include <cmath>
@@ -48,7 +50,12 @@ const float ENEMY_HITBOX_SIZE = 36.0f;
 const uint32_t COLLISION_DEFAULT = 0x0001;
 const uint32_t COLLISION_PLAYER = 0x0002;
 const uint32_t COLLISION_BOMB = 0x0004;
+const uint32_t COLLISION_INDESTRUCTIBLE = 0x0008;
+const uint32_t COLLISION_DESTRUCTIBLE = 0x0010;
 const uint32_t COLLISION_ALL = 0xFFFFFFFF;
+const int MAX_ITEMS_ACTIVOS = 3;
+const float DURACION_ITEM_TEMPORAL = 10.0f;
+const float TIEMPO_RESPAWN_ITEM = 20.0f;
 
 class PhysicsSpace
 {
@@ -147,7 +154,9 @@ public:
         return bodyId;
     }
 
-    b2BodyId createStaticBody(float x, float y, float width, float height)
+    b2BodyId createStaticBody(float x, float y, float width, float height,
+                              uint32_t categoryBits = COLLISION_DEFAULT,
+                              uint32_t maskBits = COLLISION_ALL)
     {
         if (!b2World_IsValid(world))
         {
@@ -168,6 +177,8 @@ public:
 
         b2ShapeDef shapeDef = b2DefaultShapeDef();
         shapeDef.density = 0.0f;
+        shapeDef.filter.categoryBits = categoryBits;
+        shapeDef.filter.maskBits = maskBits;
 
         b2CreatePolygonShape(bodyId, &shapeDef, &polygon);
 
@@ -374,23 +385,54 @@ private:
 };
 
 // ============== POWER-UP ==============
+enum TipoPowerUp
+{
+    ITEM_BOMBA_EXTRA = 0,
+    ITEM_ESCUDO = 1,
+    ITEM_FANTASMA = 2,
+    ITEM_VELOCIDAD = 3,
+    ITEM_VIDA = 4,
+    ITEM_TOTAL = 5
+};
+
 class PowerUp
 {
 public:
-    PowerUp(int fila, int columna)
-        : fila(fila), columna(columna), activo(true)
+    PowerUp(int fila, int columna, int tipo = -1, bool visible = false)
+        : fila(fila), columna(columna), tipo(tipo), activo(true), visible(visible)
     {
-        // Generar tipo aleatorio (0 = Bota, 1 = Fuego, 2 = Bomba Extra)
-        tipo = rand() % 3;
+        if (this->tipo < 0 || this->tipo >= ITEM_TOTAL)
+        {
+            this->tipo = rand() % ITEM_TOTAL;
+        }
     }
 
     void draw(sf::RenderWindow& window)
     {
+        if (!activo || !visible)
+        {
+            return;
+        }
+
+        sf::Texture* textura = obtenerTextura(tipo);
+        float posX = columna * 64.0f + 32.0f;
+        float posY = fila * 64.0f + 32.0f;
+
+        if (textura != nullptr)
+        {
+            sf::Sprite item;
+            item.setTexture(*textura);
+            sf::Vector2u size = textura->getSize();
+            item.setOrigin(size.x / 2.0f, size.y / 2.0f);
+            float escala = 46.0f / static_cast<float>(std::max(size.x, size.y));
+            item.setScale(escala, escala);
+            item.setPosition(posX, posY);
+            window.draw(item);
+            return;
+        }
+
         if (activo)
         {
-            float posX = columna * 64.0f + 32.0f;
-            float posY = fila * 64.0f + 32.0f;
-
             sf::CircleShape item(15.0f);
             item.setPosition(posX - 15.0f, posY - 15.0f);
 
@@ -416,14 +458,80 @@ public:
     int getColumna() const { return columna; }
     int getTipo() const { return tipo; }
     bool isActivo() const { return activo; }
+    bool estaVisible() const { return visible; }
+    bool estaOculto() const { return activo && !visible; }
+    bool estaEnCelda(int f, int c) const { return fila == f && columna == c; }
+    void revelar() { visible = true; }
     void desactivar() { activo = false; }
 
+    static sf::Texture* obtenerTextura(int tipo)
+    {
+        cargarTexturas();
+        if (tipo < 0 || tipo >= ITEM_TOTAL || !texturasCargadas[tipo])
+        {
+            return nullptr;
+        }
+
+        return &texturas[tipo];
+    }
+
+    static const char* obtenerNombre(int tipo)
+    {
+        static const char* nombres[ITEM_TOTAL] = {
+            "Bomba",
+            "Escudo",
+            "Fantasma",
+            "Velocidad",
+            "Vida"
+        };
+
+        if (tipo < 0 || tipo >= ITEM_TOTAL)
+        {
+            return "";
+        }
+
+        return nombres[tipo];
+    }
+
 private:
+    static void cargarTexturas()
+    {
+        static const char* rutas[ITEM_TOTAL] = {
+            "assets/images/item_bomba.png",
+            "assets/images/item_escudo.png",
+            "assets/images/item_fantasma.png",
+            "assets/images/item_velocidad.png",
+            "assets/images/item_vida.png"
+        };
+
+        for (int i = 0; i < ITEM_TOTAL; i++)
+        {
+            if (!texturasIntentadas[i])
+            {
+                texturasCargadas[i] = texturas[i].loadFromFile(rutas[i]);
+                texturasIntentadas[i] = true;
+                if (!texturasCargadas[i])
+                {
+                    std::cout << "Aviso: no se pudo cargar " << rutas[i] << std::endl;
+                }
+            }
+        }
+    }
+
     int fila;
     int columna;
-    int tipo;  // 0 = Bota, 1 = Fuego, 2 = Bomba Extra
+    int tipo;  // TipoPowerUp
     bool activo;
+    bool visible;
+
+    static std::array<sf::Texture, ITEM_TOTAL> texturas;
+    static std::array<bool, ITEM_TOTAL> texturasCargadas;
+    static std::array<bool, ITEM_TOTAL> texturasIntentadas;
 };
+
+std::array<sf::Texture, ITEM_TOTAL> PowerUp::texturas;
+std::array<bool, ITEM_TOTAL> PowerUp::texturasCargadas = {false, false, false, false, false};
+std::array<bool, ITEM_TOTAL> PowerUp::texturasIntentadas = {false, false, false, false, false};
 
 // ============== FIN POWER-UP ==============
 
@@ -746,7 +854,9 @@ public:
            const std::string& rutaTextura = "assets/images/verde_spritesheet.png")
         : personaje(position, rutaTextura), physicsSpace(physics), 
           maxBombas(1), rangoFuego(1), speed(6.5f),
-          speedOriginal(6.5f), vidas(3), tiempoInvulnerable(0.0f)
+          speedOriginal(6.5f), vidas(3), tiempoInvulnerable(0.0f),
+          tiempoBombaExtra(0.0f), tiempoEscudo(0.0f), tiempoFantasma(0.0f),
+          tiempoVelocidad(0.0f), ignorandoDestructibles(false)
     {
         // Crear cuerpo dinámico en Box2D v3.0
         bodyId = physicsSpace.createDynamicCircleBody(
@@ -840,6 +950,15 @@ public:
             }
         }
 
+        actualizarTemporizador(tiempoBombaExtra, deltaTime);
+        actualizarTemporizador(tiempoEscudo, deltaTime);
+        actualizarTemporizador(tiempoFantasma, deltaTime);
+        actualizarTemporizador(tiempoVelocidad, deltaTime);
+
+        maxBombas = (tiempoBombaExtra > 0.0f) ? 2 : 1;
+        speed = (tiempoVelocidad > 0.0f) ? speedOriginal * 1.5f : speedOriginal;
+        setIgnorarDestructibles(tiempoFantasma > 0.0f);
+
         personaje.update();
     }
 
@@ -858,6 +977,11 @@ public:
     void plantarBomba(Mapa& mapa, std::vector<Bomba>& bombas, PhysicsSpace& physics, int propietario = 0)
     {
         // Verificar que no se supere el máximo de bombas
+        if (tiempoFantasma > 0.0f)
+        {
+            return;
+        }
+
         int bombasActivas = 0;
         for (const auto& bomba : bombas)
         {
@@ -900,20 +1024,31 @@ public:
 
     void recolectarItem(int tipo)
     {
-        if (tipo == 0)
+        if (tipo == ITEM_BOMBA_EXTRA)
         {
             // Bota: aumentar velocidad
-            speed = speedOriginal * 1.5f;
+            tiempoBombaExtra = DURACION_ITEM_TEMPORAL;
+            maxBombas = 2;
         }
-        else if (tipo == 1)
+        else if (tipo == ITEM_ESCUDO)
         {
             // Fuego: aumentar rango
-            rangoFuego++;
+            tiempoEscudo = DURACION_ITEM_TEMPORAL;
         }
-        else if (tipo == 2)
+        else if (tipo == ITEM_FANTASMA)
         {
             // Bomba Extra: aumentar máximo de bombas
-            maxBombas++;
+            tiempoFantasma = DURACION_ITEM_TEMPORAL;
+            setIgnorarDestructibles(true);
+        }
+        else if (tipo == ITEM_VELOCIDAD)
+        {
+            tiempoVelocidad = DURACION_ITEM_TEMPORAL;
+            speed = speedOriginal * 1.5f;
+        }
+        else if (tipo == ITEM_VIDA)
+        {
+            vidas++;
         }
     }
 
@@ -925,7 +1060,7 @@ public:
     void recibirDano(PhysicsSpace& physics)
     {
         (void)physics;
-        if (vidas <= 0 || tiempoInvulnerable > 0.0f)
+        if (vidas <= 0 || tiempoInvulnerable > 0.0f || tiempoEscudo > 0.0f)
         {
             return;
         }
@@ -948,6 +1083,7 @@ public:
             maxBombas = 1;
             rangoFuego = 1;
             speed = speedOriginal;
+            limpiarEfectosTemporales();
         }
     }
 
@@ -968,14 +1104,80 @@ public:
         speed = speedOriginal;
         vidas = 3;
         tiempoInvulnerable = 0.0f;
+        limpiarEfectosTemporales();
     }
 
     b2BodyId getBodyId() { return bodyId; }
     int getRangoFuego() const { return rangoFuego; }
     int getMaxBombas() const { return maxBombas; }
     int getVidas() const { return vidas; }
+    float getTiempoItem(int tipo) const
+    {
+        if (tipo == ITEM_BOMBA_EXTRA)
+            return tiempoBombaExtra;
+        if (tipo == ITEM_ESCUDO)
+            return tiempoEscudo;
+        if (tipo == ITEM_FANTASMA)
+            return tiempoFantasma;
+        if (tipo == ITEM_VELOCIDAD)
+            return tiempoVelocidad;
+        return 0.0f;
+    }
 
 private:
+    void actualizarTemporizador(float& tiempo, float deltaTime)
+    {
+        if (tiempo > 0.0f)
+        {
+            tiempo -= deltaTime;
+            if (tiempo < 0.0f)
+            {
+                tiempo = 0.0f;
+            }
+        }
+    }
+
+    void limpiarEfectosTemporales()
+    {
+        tiempoBombaExtra = 0.0f;
+        tiempoEscudo = 0.0f;
+        tiempoFantasma = 0.0f;
+        tiempoVelocidad = 0.0f;
+        maxBombas = 1;
+        speed = speedOriginal;
+        setIgnorarDestructibles(false);
+    }
+
+    void setIgnorarDestructibles(bool activo)
+    {
+        if (ignorandoDestructibles == activo || !b2Body_IsValid(bodyId))
+        {
+            return;
+        }
+
+        int cantidadShapes = b2Body_GetShapeCount(bodyId);
+        if (cantidadShapes <= 0)
+        {
+            return;
+        }
+
+        std::vector<b2ShapeId> shapes(cantidadShapes);
+        int shapesLeidas = b2Body_GetShapes(bodyId, shapes.data(), cantidadShapes);
+        uint32_t maskBits = activo ? (COLLISION_ALL & ~COLLISION_DESTRUCTIBLE) : COLLISION_ALL;
+
+        for (int i = 0; i < shapesLeidas; i++)
+        {
+            if (b2Shape_IsValid(shapes[i]))
+            {
+                b2Filter filtro = b2Shape_GetFilter(shapes[i]);
+                filtro.maskBits = maskBits;
+                b2Shape_SetFilter(shapes[i], filtro);
+            }
+        }
+
+        ignorandoDestructibles = activo;
+    }
+
     Personaje personaje;
     b2BodyId bodyId;
     PhysicsSpace& physicsSpace;
@@ -987,6 +1189,11 @@ private:
     sf::Vector2f posicionOriginal;
     int vidas;
     float tiempoInvulnerable;
+    float tiempoBombaExtra;
+    float tiempoEscudo;
+    float tiempoFantasma;
+    float tiempoVelocidad;
+    bool ignorandoDestructibles;
 };
 
 // ============== FIN KNIGHT - Box2D v3.0 ==============
@@ -1325,6 +1532,142 @@ private:
 // ============== FIN BOSS ==============
 
 // ============== FUNCIÓN CARGAR NIVEL (FASE 5 y 6) ==============
+int contarItemsActivos(const std::vector<PowerUp>& items)
+{
+    int total = 0;
+    for (const auto& item : items)
+    {
+        if (item.isActivo())
+        {
+            total++;
+        }
+    }
+    return total;
+}
+
+bool celdaTieneItemActivo(const std::vector<PowerUp>& items, int fila, int columna)
+{
+    for (const auto& item : items)
+    {
+        if (item.isActivo() && item.estaEnCelda(fila, columna))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool colocarItemOcultoAleatorio(Mapa& mapa, std::vector<PowerUp>& items)
+{
+    if (contarItemsActivos(items) >= MAX_ITEMS_ACTIVOS)
+    {
+        return false;
+    }
+
+    std::vector<sf::Vector2i> celdasDisponibles;
+    for (int fila = 1; fila < 12; fila++)
+    {
+        for (int columna = 1; columna < 14; columna++)
+        {
+            if (mapa.obtenerTipoCelda(fila, columna) == Mapa::DESTRUCTIBLE &&
+                !celdaTieneItemActivo(items, fila, columna))
+            {
+                celdasDisponibles.push_back({fila, columna});
+            }
+        }
+    }
+
+    if (celdasDisponibles.empty())
+    {
+        return false;
+    }
+
+    sf::Vector2i celda = celdasDisponibles[rand() % celdasDisponibles.size()];
+    items.emplace_back(celda.x, celda.y, rand() % ITEM_TOTAL, false);
+    return true;
+}
+
+void llenarItemsIniciales(Mapa& mapa, std::vector<PowerUp>& items)
+{
+    while (contarItemsActivos(items) < MAX_ITEMS_ACTIVOS)
+    {
+        if (!colocarItemOcultoAleatorio(mapa, items))
+        {
+            break;
+        }
+    }
+}
+
+void dibujarItemsActivosHUD(sf::RenderWindow& window, const Knight& knight, sf::Font& fuente,
+                            const std::string& etiqueta, float x, float y)
+{
+    const int tiposTemporales[4] = {
+        ITEM_BOMBA_EXTRA,
+        ITEM_ESCUDO,
+        ITEM_FANTASMA,
+        ITEM_VELOCIDAD
+    };
+
+    float offsetX = 0.0f;
+    bool dibujoAlgo = false;
+
+    for (int tipo : tiposTemporales)
+    {
+        float tiempo = knight.getTiempoItem(tipo);
+        if (tiempo <= 0.0f)
+        {
+            continue;
+        }
+
+        if (!dibujoAlgo)
+        {
+            sf::Text textoEtiqueta;
+            textoEtiqueta.setFont(fuente);
+            textoEtiqueta.setCharacterSize(16);
+            textoEtiqueta.setFillColor(sf::Color::White);
+            textoEtiqueta.setOutlineColor(sf::Color::Black);
+            textoEtiqueta.setOutlineThickness(2.0f);
+            textoEtiqueta.setString(etiqueta);
+            textoEtiqueta.setPosition(x, y + 8.0f);
+            window.draw(textoEtiqueta);
+            offsetX = 34.0f;
+            dibujoAlgo = true;
+        }
+
+        sf::RectangleShape fondoIcono(sf::Vector2f(72.0f, 36.0f));
+        fondoIcono.setFillColor(sf::Color(0, 0, 0, 135));
+        fondoIcono.setOutlineColor(sf::Color(255, 255, 255, 90));
+        fondoIcono.setOutlineThickness(1.0f);
+        fondoIcono.setPosition(x + offsetX, y);
+        window.draw(fondoIcono);
+
+        sf::Texture* textura = PowerUp::obtenerTextura(tipo);
+        if (textura != nullptr)
+        {
+            sf::Sprite icono;
+            icono.setTexture(*textura);
+            sf::Vector2u size = textura->getSize();
+            icono.setOrigin(size.x / 2.0f, size.y / 2.0f);
+            float escala = 28.0f / static_cast<float>(std::max(size.x, size.y));
+            icono.setScale(escala, escala);
+            icono.setPosition(x + offsetX + 18.0f, y + 18.0f);
+            window.draw(icono);
+        }
+
+        sf::Text textoTiempo;
+        textoTiempo.setFont(fuente);
+        textoTiempo.setCharacterSize(16);
+        textoTiempo.setFillColor(sf::Color::White);
+        textoTiempo.setOutlineColor(sf::Color::Black);
+        textoTiempo.setOutlineThickness(2.0f);
+        textoTiempo.setString(std::to_string(static_cast<int>(std::ceil(tiempo))) + "s");
+        textoTiempo.setPosition(x + offsetX + 38.0f, y + 8.0f);
+        window.draw(textoTiempo);
+
+        offsetX += 78.0f;
+    }
+}
+
 void cargarNivel(int nivel, Mapa& mapa, Knight& knight, std::vector<Enemigo>& enemigos,
                  std::vector<Bomba>& bombas, std::vector<Explosion>& explosiones,
                  std::vector<PowerUp>& items, std::vector<Boss>& jefes, PhysicsSpace& physics)
@@ -1354,6 +1697,7 @@ void cargarNivel(int nivel, Mapa& mapa, Knight& knight, std::vector<Enemigo>& en
     // Regenerar mapa
     mapa.inicializarGrid();
     mapa.generarFisicas(physics);
+    llenarItemsIniciales(mapa, items);
 
     // Teletransportar Knight a inicio
     float posX = 1.0f * 64.0f + 32.0f;
@@ -1430,6 +1774,7 @@ int main()
 
     // Vector de power-ups
     std::vector<PowerUp> listaItems;
+    std::vector<float> temporizadoresRespawnItems;
 
     // Vector de enemigos (FASE 4)
     std::vector<Enemigo> listaEnemigos;
@@ -1569,6 +1914,7 @@ int main()
                         nivelActual = 1;
                         knight.reiniciar(96.0f, 96.0f);
                         knight2.reiniciar(-500.0f, -500.0f);
+                        temporizadoresRespawnItems.clear();
                         cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics);
                     }
                     else if (modoActual == MULTIJUGADOR)
@@ -1592,10 +1938,12 @@ int main()
                         listaEnemigos.clear();
                         listaExplosiones.clear();
                         listaItems.clear();
+                        temporizadoresRespawnItems.clear();
                         listaJefes.clear();
 
                         mapa.inicializarGrid();
                         mapa.generarFisicas(physics);
+                        llenarItemsIniciales(mapa, listaItems);
                         knight.reiniciar(96.0f, 96.0f);
                         knight2.reiniciar(864.0f, 736.0f);
                         nivelActual = 1;
@@ -1643,10 +1991,12 @@ int main()
                         listaEnemigos.clear();
                         listaExplosiones.clear();
                         listaItems.clear();
+                        temporizadoresRespawnItems.clear();
                         listaJefes.clear();
 
                         mapa.inicializarGrid();
                         mapa.generarFisicas(physics);
+                        llenarItemsIniciales(mapa, listaItems);
                         knight.reiniciar(96.0f, 96.0f);
                         knight2.reiniciar(864.0f, 736.0f);
                     }
@@ -1654,6 +2004,7 @@ int main()
                     {
                         knight.reiniciar(96.0f, 96.0f);
                         knight2.reiniciar(-500.0f, -500.0f);
+                        temporizadoresRespawnItems.clear();
                         cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics);
                     }
                 }
@@ -1740,6 +2091,21 @@ int main()
         }
 
         mapa.update(timeStep);
+
+        auto respawnItem = temporizadoresRespawnItems.begin();
+        while (respawnItem != temporizadoresRespawnItems.end())
+        {
+            *respawnItem -= timeStep;
+            if (*respawnItem <= 0.0f)
+            {
+                colocarItemOcultoAleatorio(mapa, listaItems);
+                respawnItem = temporizadoresRespawnItems.erase(respawnItem);
+            }
+            else
+            {
+                ++respawnItem;
+            }
+        }
 
         // Eliminar explosiones inactivas
         auto it_exp = listaExplosiones.begin();
@@ -1904,18 +2270,21 @@ int main()
         // Recopilar items
         for (auto& item : listaItems)
         {
-            if (item.isActivo() && item.getFila() == filaKnight && item.getColumna() == colKnight)
+            if (item.isActivo() && item.estaVisible() && item.getFila() == filaKnight && item.getColumna() == colKnight)
             {
                 knight.recolectarItem(item.getTipo());
                 item.desactivar();
+                temporizadoresRespawnItems.push_back(TIEMPO_RESPAWN_ITEM);
             }
             else if (modoActual == MULTIJUGADOR &&
                      item.isActivo() &&
+                     item.estaVisible() &&
                      item.getFila() == filaKnight2 &&
                      item.getColumna() == colKnight2)
             {
                 knight2.recolectarItem(item.getTipo());
                 item.desactivar();
+                temporizadoresRespawnItems.push_back(TIEMPO_RESPAWN_ITEM);
             }
         }
 
@@ -2079,6 +2448,11 @@ int main()
         if (fuenteCargada)
         {
             window.draw(textoHUD);
+            dibujarItemsActivosHUD(window, knight, fuente, "P1", 10.0f, 38.0f);
+            if (modoActual == MULTIJUGADOR)
+            {
+                dibujarItemsActivosHUD(window, knight2, fuente, "P2", 10.0f, 78.0f);
+            }
         }
 
         // RENDER GAME OVER / VICTORIA OVERLAY (FASE 5)
