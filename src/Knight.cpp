@@ -181,6 +181,7 @@ Knight::Knight(sf::Vector2f position, PhysicsSpace& physics, const std::string& 
       speedOriginal(6.5f),
       vidas(3),
       tiempoInvulnerable(0.0f),
+      puedePatear(false),
       idJugador(idJugador)
 {
     bodyId = physicsSpace.createDynamicCircleBody(
@@ -328,8 +329,9 @@ void Knight::plantarBomba(Mapa& mapa, std::vector<Bomba>& bombas, PhysicsSpace& 
     bombas.push_back(nuevaBomba);
 }
 
-void Knight::recolectarItem(int tipo)
+void Knight::recolectarItem(int tipo, bool modoVersus)
 {
+    (void)modoVersus;
     if (tipo == 0)
     {
         speed = speedOriginal * 1.5f;
@@ -342,19 +344,23 @@ void Knight::recolectarItem(int tipo)
     {
         maxBombas++;
     }
+    else if (tipo == 5)
+    {
+        puedePatear = true;
+    }
 }
 
-void Knight::morir(PhysicsSpace& physics)
+bool Knight::morir(PhysicsSpace& physics, bool conservarMejoras)
 {
-    recibirDano(physics);
+    return recibirDano(physics, conservarMejoras);
 }
 
-void Knight::recibirDano(PhysicsSpace& physics)
+bool Knight::recibirDano(PhysicsSpace& physics, bool conservarMejoras)
 {
     (void)physics;
     if (vidas <= 0 || tiempoInvulnerable > 0.0f)
     {
-        return;
+        return false;
     }
 
     vidas--;
@@ -372,10 +378,15 @@ void Knight::recibirDano(PhysicsSpace& physics)
             b2Body_SetLinearVelocity(bodyId, {0.0f, 0.0f});
         }
 
-        maxBombas = 1;
-        rangoFuego = 1;
-        speed = speedOriginal;
+        if (!conservarMejoras)
+        {
+            maxBombas = 1;
+            rangoFuego = 1;
+            speed = speedOriginal;
+        }
     }
+
+    return true;
 }
 
 void Knight::cambiarSprite(const std::string& ruta)
@@ -408,6 +419,14 @@ void Knight::reiniciar(float x, float y)
     speed = speedOriginal;
     vidas = 3;
     tiempoInvulnerable = 0.0f;
+    puedePatear = false;
+}
+
+void Knight::reiniciarRonda(float x, float y)
+{
+    int vidasActuales = vidas;
+    reiniciar(x, y);
+    vidas = vidasActuales;
 }
 
 void Knight::moverA(float x, float y)
@@ -440,4 +459,19 @@ int Knight::getMaxBombas() const
 int Knight::getVidas() const
 {
     return vidas;
+}
+
+void Knight::setVidas(int nuevasVidas)
+{
+    vidas = nuevasVidas;
+}
+
+int Knight::getDireccionActual() const
+{
+    return direccionActual;
+}
+
+bool Knight::puedePatearBombas() const
+{
+    return puedePatear;
 }
