@@ -41,6 +41,7 @@ private:
     };
 
     void limpiarFisicas();
+    bool esZonaSeguraSpawn(int fila, int columna) const;
     void calcularRectsObjetos(const sf::Image& imagen);
     int obtenerFilaTema(int fila, int columna) const;
     int obtenerColumnaObjeto(int fila, int columna, int tipo) const;

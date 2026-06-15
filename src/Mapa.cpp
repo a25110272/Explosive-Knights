@@ -64,11 +64,7 @@ void Mapa::inicializarGrid()
             {
                 grid[i][j] = INDESTRUCTIBLE;
             }
-            else if ((i == 1 && j == 1) || (i == 1 && j == 2) || (i == 2 && j == 1))
-            {
-                grid[i][j] = VACIO;
-            }
-            else if ((i == 11 && j == 1) || (i == 1 && j == 13) || (i == 11 && j == 13))
+            else if (esZonaSeguraSpawn(i, j))
             {
                 grid[i][j] = VACIO;
             }
@@ -238,6 +234,23 @@ void Mapa::limpiarFisicas()
 
     bodiesMap.clear();
     bloquesEnDestruccion.clear();
+}
+
+bool Mapa::esZonaSeguraSpawn(int fila, int columna) const
+{
+    return
+        (fila == 1 && columna == 1) ||
+        (fila == 1 && columna == 2) ||
+        (fila == 2 && columna == 1) ||
+        (fila == 1 && columna == 13) ||
+        (fila == 1 && columna == 12) ||
+        (fila == 2 && columna == 13) ||
+        (fila == 11 && columna == 1) ||
+        (fila == 10 && columna == 1) ||
+        (fila == 11 && columna == 2) ||
+        (fila == 11 && columna == 13) ||
+        (fila == 10 && columna == 13) ||
+        (fila == 11 && columna == 12);
 }
 
 void Mapa::calcularRectsObjetos(const sf::Image& imagen)
