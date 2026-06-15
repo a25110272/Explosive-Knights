@@ -43,7 +43,7 @@ public:
             frameHeight - 2
         ));
         centrarSprite();
-        float escala = 64.0f / static_cast<float>(frameWidth);
+        float escala = 64.0f / static_cast<float>(frameHeight);
         sprite.setScale(escala, escala);
     }
 

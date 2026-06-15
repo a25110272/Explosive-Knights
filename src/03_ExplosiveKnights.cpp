@@ -41,10 +41,12 @@ enum ModoJuego
 
 // ============== PHYSICS ENGINE (Box2D v3.0) ==============
 const float PIXELS_PER_METER = 30.0f;
-const float MAP_CELL_SIZE = 64.0f;
+const float TAMANO_TILE = 64.0f;
+const float MAP_CELL_SIZE = TAMANO_TILE;
 const float WALL_HITBOX_SIZE = 56.0f;
 const float KNIGHT_HITBOX_SIZE = 40.0f;
-const float KNIGHT_COLLISION_RADIUS = 31.0f;
+const float KNIGHT_COLLISION_SIZE = TAMANO_TILE * 0.9f;
+const float KNIGHT_COLLISION_RADIUS = KNIGHT_COLLISION_SIZE / 2.0f;
 const float KNIGHT_DAMAGE_HITBOX_SIZE = 32.0f;
 const float FIRE_DAMAGE_MARGIN = 4.0f;
 const float ENEMY_HITBOX_SIZE = 36.0f;
@@ -246,7 +248,7 @@ public:
             frameHeight - 2
         ));
         centrarSprite();
-        float escala = MAP_CELL_SIZE / static_cast<float>(frameWidth);
+        float escala = MAP_CELL_SIZE / static_cast<float>(frameHeight);
         sprite.setScale(escala, escala);
     }
 
