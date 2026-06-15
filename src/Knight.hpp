@@ -16,10 +16,13 @@ class Knight
 {
 public:
     Knight(sf::Vector2f position, PhysicsSpace& physics,
-           const std::string& rutaTextura = "assets/images/Verde_spritesheet.png");
+           const std::string& rutaTextura = "assets/images/verde_spritesheet.png");
     ~Knight();
 
-    void handleInput();
+    void handleInput(sf::Keyboard::Key teclaArriba = sf::Keyboard::W,
+                     sf::Keyboard::Key teclaAbajo = sf::Keyboard::S,
+                     sf::Keyboard::Key teclaDerecha = sf::Keyboard::D,
+                     sf::Keyboard::Key teclaIzquierda = sf::Keyboard::A);
     void syncWithPhysics();
     void update(float deltaTime);
     void draw(sf::RenderWindow& window);

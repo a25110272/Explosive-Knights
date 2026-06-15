@@ -30,6 +30,12 @@ enum EstadoJuego
     VICTORIA
 };
 
+enum ModoJuego
+{
+    ARCADE,
+    MULTIJUGADOR
+};
+
 // ============== PHYSICS ENGINE (Box2D v3.0) ==============
 const float PIXELS_PER_METER = 30.0f;
 const float MAP_CELL_SIZE = 64.0f;
@@ -582,8 +588,9 @@ private:
 class Bomba
 {
 public:
-    Bomba(int fila, int columna, PhysicsSpace& physics)
+    Bomba(int fila, int columna, PhysicsSpace& physics, int rangoFuego = 1, int propietario = 0)
         : fila(fila), columna(columna), activa(true), jugadorEncima(true), solida(false),
+          rangoFuego(rangoFuego), propietario(propietario),
           bodyId(b2_nullBodyId), shapeId(b2_nullShapeId)
     {
         // Calcular posición en píxeles: centro de la celda
@@ -616,25 +623,37 @@ public:
         temporizador.restart();
     }
 
-    bool update(PhysicsSpace& physics, b2BodyId jugadorBodyId)
+    bool update(PhysicsSpace& physics, const std::vector<b2BodyId>& jugadoresBodyId)
     {
         // Verificar si superó los 3 segundos
         (void)physics;
 
-        if (activa && jugadorEncima && !solida && b2Body_IsValid(jugadorBodyId))
+        if (activa && jugadorEncima && !solida)
         {
-            b2Vec2 posJugador = b2Body_GetPosition(jugadorBodyId);
-            float jugadorX = posJugador.x * PIXELS_PER_METER;
-            float jugadorY = posJugador.y * PIXELS_PER_METER;
-
             float bombaX = columna * 64.0f + 32.0f;
             float bombaY = fila * 64.0f + 32.0f;
+            bool algunJugadorEncima = false;
 
-            bool aunSeTraslapan =
-                std::abs(jugadorX - bombaX) < 48.0f &&
-                std::abs(jugadorY - bombaY) < 48.0f;
+            for (b2BodyId jugadorBodyId : jugadoresBodyId)
+            {
+                if (!b2Body_IsValid(jugadorBodyId))
+                {
+                    continue;
+                }
 
-            if (!aunSeTraslapan)
+                b2Vec2 posJugador = b2Body_GetPosition(jugadorBodyId);
+                float jugadorX = posJugador.x * PIXELS_PER_METER;
+                float jugadorY = posJugador.y * PIXELS_PER_METER;
+
+                if (std::abs(jugadorX - bombaX) < 48.0f &&
+                    std::abs(jugadorY - bombaY) < 48.0f)
+                {
+                    algunJugadorEncima = true;
+                    break;
+                }
+            }
+
+            if (!algunJugadorEncima)
             {
                 jugadorEncima = false;
                 solida = true;
@@ -662,6 +681,12 @@ public:
         }
 
         return false;  // No explotó
+    }
+
+    bool update(PhysicsSpace& physics, b2BodyId jugadorBodyId)
+    {
+        std::vector<b2BodyId> jugadoresBodyId = {jugadorBodyId};
+        return update(physics, jugadoresBodyId);
     }
 
     void draw(sf::RenderWindow& window)
@@ -695,6 +720,8 @@ public:
 
     int getFila() const { return fila; }
     int getColumna() const { return columna; }
+    int getRangoFuego() const { return rangoFuego; }
+    int getPropietario() const { return propietario; }
 
 private:
     int fila;
@@ -702,6 +729,8 @@ private:
     bool activa;
     bool jugadorEncima;
     bool solida;
+    int rangoFuego;
+    int propietario;
     b2BodyId bodyId;
     b2ShapeId shapeId;
     sf::Clock temporizador;
@@ -714,7 +743,7 @@ class Knight
 {
 public:
     Knight(sf::Vector2f position, PhysicsSpace& physics,
-           const std::string& rutaTextura = "assets/images/Verde_spritesheet.png")
+           const std::string& rutaTextura = "assets/images/verde_spritesheet.png")
         : personaje(position, rutaTextura), physicsSpace(physics), 
           maxBombas(1), rangoFuego(1), speed(6.5f),
           speedOriginal(6.5f), vidas(3), tiempoInvulnerable(0.0f)
@@ -731,7 +760,10 @@ public:
         posicionOriginal = position;
     }
 
-    void handleInput()
+    void handleInput(sf::Keyboard::Key teclaArriba = sf::Keyboard::W,
+                     sf::Keyboard::Key teclaAbajo = sf::Keyboard::S,
+                     sf::Keyboard::Key teclaDerecha = sf::Keyboard::D,
+                     sf::Keyboard::Key teclaIzquierda = sf::Keyboard::A)
     {
         // Usar la velocidad del Knight (modificable por power-ups)
         
@@ -739,25 +771,25 @@ public:
         Direccion dirActual = direccionActual;
         bool seMovio = false;
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::W))
+        if (sf::Keyboard::isKeyPressed(teclaArriba))
         {
             velocity.y = -speed;
             dirActual = ARRIBA;
             seMovio = true;
         }
-        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::S))
+        else if (sf::Keyboard::isKeyPressed(teclaAbajo))
         {
             velocity.y = speed;
             dirActual = ABAJO;
             seMovio = true;
         }
-        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::D))
+        else if (sf::Keyboard::isKeyPressed(teclaDerecha))
         {
             velocity.x = speed;
             dirActual = DERECHA;
             seMovio = true;
         }
-        else if (sf::Keyboard::isKeyPressed(sf::Keyboard::A))
+        else if (sf::Keyboard::isKeyPressed(teclaIzquierda))
         {
             velocity.x = -speed;
             dirActual = IZQUIERDA;
@@ -823,13 +855,13 @@ public:
         personaje.detenerAnimacion(direccionActual);
     }
 
-    void plantarBomba(Mapa& mapa, std::vector<Bomba>& bombas, PhysicsSpace& physics)
+    void plantarBomba(Mapa& mapa, std::vector<Bomba>& bombas, PhysicsSpace& physics, int propietario = 0)
     {
         // Verificar que no se supere el máximo de bombas
         int bombasActivas = 0;
         for (const auto& bomba : bombas)
         {
-            if (bomba.isActiva())
+            if (bomba.isActiva() && bomba.getPropietario() == propietario)
             {
                 bombasActivas++;
             }
@@ -862,7 +894,7 @@ public:
         }
 
         // Crear nueva bomba
-        Bomba nuevaBomba(fila, columna, physics);
+        Bomba nuevaBomba(fila, columna, physics, rangoFuego, propietario);
         bombas.push_back(nuevaBomba);
     }
 
@@ -903,8 +935,8 @@ public:
 
         if (vidas > 0)
         {
-            float posX = 1.0f * 64.0f + 32.0f;
-            float posY = 1.0f * 64.0f + 32.0f;
+            float posX = posicionOriginal.x;
+            float posY = posicionOriginal.y;
 
             if (b2Body_IsValid(bodyId))
             {
@@ -921,6 +953,8 @@ public:
 
     void reiniciar(float x, float y)
     {
+        posicionOriginal = sf::Vector2f(x, y);
+
         if (b2Body_IsValid(bodyId))
         {
             b2Transform transform = {{x / PIXELS_PER_METER, y / PIXELS_PER_METER}, b2Rot_identity};
@@ -1376,6 +1410,7 @@ int main()
 
     // Máquina de estados y nivel (FASE 5)
     EstadoJuego estadoActual = MENU_PRINCIPAL;
+    ModoJuego modoActual = ARCADE;
     int nivelActual = 1;
 
     // Instanciar Physics Engine
@@ -1385,6 +1420,7 @@ int main()
     Mapa mapa;
     // Instanciar Knight (jugador)
     Knight knight(sf::Vector2f(96.0f, 96.0f), physics);
+    Knight knight2(sf::Vector2f(-500.0f, -500.0f), physics, "assets/images/Azul_spritesheet.png");
 
     // Vector de bombas (FASE 2)
     std::vector<Bomba> listaBombas;
@@ -1494,11 +1530,15 @@ int main()
                     if (opcion == 0)
                     {
                         modoSeleccionado = opcion;
+                        modoActual = ARCADE;
+                        pantallaSeleccion.setModoMultijugador(false);
                         estadoActual = SELECCION_PERSONAJE;
                     }
                     else if (opcion == 1)
                     {
                         modoSeleccionado = opcion;
+                        modoActual = MULTIJUGADOR;
+                        pantallaSeleccion.setModoMultijugador(true);
                         estadoActual = SELECCION_PERSONAJE;
                     }
                     else if (opcion == 2)
@@ -1515,28 +1555,51 @@ int main()
                 pantallaSeleccion.handleInput(event);
                 if (pantallaSeleccion.seleccionConfirmada())
                 {
-                    int personaje = pantallaSeleccion.getPersonajeSeleccionado();
-                    const std::string rutasPersonajes[4] = {
-                        "assets/images/Verde_spritesheet.png",
-                        "assets/images/Rojo_spritesheet.png",
-                        "assets/images/Azul_spritesheet.png",
-                        "assets/images/Negro_spritesheet.png"
-                    };
-                    knight.cambiarSprite(rutasPersonajes[personaje]);
-                    pantallaSeleccion.limpiarConfirmacion();
-                    std::cout << "Personaje seleccionado: " << personaje << std::endl;
+                    int personajeP1 = pantallaSeleccion.getPersonajeSeleccionadoP1();
+                    int personajeP2 = pantallaSeleccion.getPersonajeSeleccionadoP2();
 
-                    if (modoSeleccionado == 0)
+                    knight.cambiarSprite(pantallaSeleccion.getRutaTexturaPersonaje(personajeP1));
+                    knight2.cambiarSprite(pantallaSeleccion.getRutaTexturaPersonaje(personajeP2));
+                    pantallaSeleccion.limpiarConfirmacion();
+                    std::cout << "P1 seleccionado: " << personajeP1 << " | P2 seleccionado: " << personajeP2 << std::endl;
+
+                    if (modoActual == ARCADE)
                     {
                         estadoActual = JUGANDO;
                         nivelActual = 1;
                         knight.reiniciar(96.0f, 96.0f);
+                        knight2.reiniciar(-500.0f, -500.0f);
                         cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics);
                     }
-                    else if (modoSeleccionado == 1)
+                    else if (modoActual == MULTIJUGADOR)
                     {
-                        std::cout << "Modo Versus no implementado" << std::endl;
-                        estadoActual = MENU_PRINCIPAL;
+                        for (auto& bomba : listaBombas)
+                        {
+                            bomba.destruirFisica();
+                        }
+
+                        for (auto& enemigo : listaEnemigos)
+                        {
+                            enemigo.destruir(physics);
+                        }
+
+                        for (auto& jefe : listaJefes)
+                        {
+                            jefe.destruir(physics);
+                        }
+
+                        listaBombas.clear();
+                        listaEnemigos.clear();
+                        listaExplosiones.clear();
+                        listaItems.clear();
+                        listaJefes.clear();
+
+                        mapa.inicializarGrid();
+                        mapa.generarFisicas(physics);
+                        knight.reiniciar(96.0f, 96.0f);
+                        knight2.reiniciar(864.0f, 736.0f);
+                        nivelActual = 1;
+                        estadoActual = JUGANDO;
                     }
                 }
 
@@ -1548,15 +1611,51 @@ int main()
             {
                 if (event.key.code == sf::Keyboard::Space && estadoActual == JUGANDO)
                 {
-                    knight.plantarBomba(mapa, listaBombas, physics);
+                    knight.plantarBomba(mapa, listaBombas, physics, 1);
+                }
+                if (event.key.code == sf::Keyboard::Return && estadoActual == JUGANDO && modoActual == MULTIJUGADOR)
+                {
+                    knight2.plantarBomba(mapa, listaBombas, physics, 2);
                 }
                 // Reiniciar con Enter si es GAME_OVER o VICTORIA (FASE 5)
                 if (event.key.code == sf::Keyboard::Return && (estadoActual == GAME_OVER || estadoActual == VICTORIA))
                 {
                     estadoActual = JUGANDO;
                     nivelActual = 1;
-                    knight.reiniciar(96.0f, 96.0f);
-                    cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics);
+                    if (modoActual == MULTIJUGADOR)
+                    {
+                        for (auto& bomba : listaBombas)
+                        {
+                            bomba.destruirFisica();
+                        }
+
+                        for (auto& enemigo : listaEnemigos)
+                        {
+                            enemigo.destruir(physics);
+                        }
+
+                        for (auto& jefe : listaJefes)
+                        {
+                            jefe.destruir(physics);
+                        }
+
+                        listaBombas.clear();
+                        listaEnemigos.clear();
+                        listaExplosiones.clear();
+                        listaItems.clear();
+                        listaJefes.clear();
+
+                        mapa.inicializarGrid();
+                        mapa.generarFisicas(physics);
+                        knight.reiniciar(96.0f, 96.0f);
+                        knight2.reiniciar(864.0f, 736.0f);
+                    }
+                    else
+                    {
+                        knight.reiniciar(96.0f, 96.0f);
+                        knight2.reiniciar(-500.0f, -500.0f);
+                        cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics);
+                    }
                 }
             }
         }
@@ -1580,23 +1679,41 @@ int main()
 
         // INPUT
         knight.handleInput();
+        if (modoActual == MULTIJUGADOR)
+        {
+            knight2.handleInput(sf::Keyboard::Up, sf::Keyboard::Down, sf::Keyboard::Right, sf::Keyboard::Left);
+        }
 
         // PHYSICS STEP (Box2D v3.0)
         physics.step(timeStep);
 
         // SYNC GRAPHICS WITH PHYSICS
         knight.syncWithPhysics();
+        if (modoActual == MULTIJUGADOR)
+        {
+            knight2.syncWithPhysics();
+        }
 
         // UPDATE SPRITES
         knight.update(timeStep);
+        if (modoActual == MULTIJUGADOR)
+        {
+            knight2.update(timeStep);
+        }
 
         // UPDATE BOMBAS (FASE 2) + EXPLOSIONES (FASE 3)
+        std::vector<b2BodyId> jugadoresBodyId = {knight.getBodyId()};
+        if (modoActual == MULTIJUGADOR)
+        {
+            jugadoresBodyId.push_back(knight2.getBodyId());
+        }
+
         for (auto& bomba : listaBombas)
         {
-            if (bomba.update(physics, knight.getBodyId()))  // Si retorna true = explotó
+            if (bomba.update(physics, jugadoresBodyId))  // Si retorna true = explotó
             {
-                // Crear explosión con rango del Knight
-                Explosion explosion(bomba.getFila(), bomba.getColumna(), mapa, knight.getRangoFuego(), &listaItems);
+                // Crear explosión con el rango del jugador que puso la bomba
+                Explosion explosion(bomba.getFila(), bomba.getColumna(), mapa, bomba.getRangoFuego(), &listaItems);
                 listaExplosiones.push_back(explosion);
             }
         }
@@ -1728,13 +1845,13 @@ int main()
         if (estadoActual == JUGANDO)
         {
             // Verificar si el jugador murió
-            if (knight.getVidas() <= 0)
+            if (knight.getVidas() <= 0 || (modoActual == MULTIJUGADOR && knight2.getVidas() <= 0))
             {
                 estadoActual = GAME_OVER;
                 std::cout << "GAME OVER - Presiona ENTER para reiniciar" << std::endl;
             }
             // FASE 6: Si estamos en nivel 3, verificar si el Boss fue derrotado
-            else if (nivelActual == 3 && listaJefes.empty())
+            else if (modoActual == ARCADE && nivelActual == 3 && listaJefes.empty())
             {
                 estadoActual = VICTORIA;
                 std::cout << "¡VICTORIA! ¡Derrotaste al Jefe Final! - Presiona ENTER para reiniciar" << std::endl;
@@ -1766,6 +1883,23 @@ int main()
             KNIGHT_DAMAGE_HITBOX_SIZE,
             KNIGHT_DAMAGE_HITBOX_SIZE
         );
+        sf::FloatRect knight2DamageRect;
+        int filaKnight2 = -1;
+        int colKnight2 = -1;
+        if (modoActual == MULTIJUGADOR)
+        {
+            b2Vec2 posKnight2 = b2Body_GetPosition(knight2.getBodyId());
+            float pixelXKnight2 = posKnight2.x * PIXELS_PER_METER;
+            float pixelYKnight2 = posKnight2.y * PIXELS_PER_METER;
+            filaKnight2 = static_cast<int>(pixelYKnight2 / 64.0f);
+            colKnight2 = static_cast<int>(pixelXKnight2 / 64.0f);
+            knight2DamageRect = sf::FloatRect(
+                pixelXKnight2 - KNIGHT_DAMAGE_HITBOX_SIZE / 2.0f,
+                pixelYKnight2 - KNIGHT_DAMAGE_HITBOX_SIZE / 2.0f,
+                KNIGHT_DAMAGE_HITBOX_SIZE,
+                KNIGHT_DAMAGE_HITBOX_SIZE
+            );
+        }
 
         // Recopilar items
         for (auto& item : listaItems)
@@ -1773,6 +1907,14 @@ int main()
             if (item.isActivo() && item.getFila() == filaKnight && item.getColumna() == colKnight)
             {
                 knight.recolectarItem(item.getTipo());
+                item.desactivar();
+            }
+            else if (modoActual == MULTIJUGADOR &&
+                     item.isActivo() &&
+                     item.getFila() == filaKnight2 &&
+                     item.getColumna() == colKnight2)
+            {
+                knight2.recolectarItem(item.getTipo());
                 item.desactivar();
             }
         }
@@ -1810,6 +1952,26 @@ int main()
                     {
                         knight.recibirDano(physics);
                         break;
+                    }
+                }
+
+                // Daño por fuego a P2
+                if (modoActual == MULTIJUGADOR)
+                {
+                    for (const auto& celda : celdasAfectadas)
+                    {
+                        sf::FloatRect fireDamageRect(
+                            celda.y * 64.0f + FIRE_DAMAGE_MARGIN,
+                            celda.x * 64.0f + FIRE_DAMAGE_MARGIN,
+                            64.0f - FIRE_DAMAGE_MARGIN * 2.0f,
+                            64.0f - FIRE_DAMAGE_MARGIN * 2.0f
+                        );
+
+                        if (fireDamageRect.intersects(knight2DamageRect))
+                        {
+                            knight2.recibirDano(physics);
+                            break;
+                        }
                     }
                 }
 
@@ -1858,9 +2020,18 @@ int main()
         // ACTUALIZAR HUD (FASE 5)
         if (fuenteCargada)
         {
-            std::string hudText = "NIVEL: " + std::to_string(nivelActual) + 
-                                  " | VIDAS: " + std::to_string(knight.getVidas()) + 
-                                  " | ENEMIGOS: " + std::to_string(listaEnemigos.size());
+            std::string hudText;
+            if (modoActual == MULTIJUGADOR)
+            {
+                hudText = "VERSUS | P1 VIDAS: " + std::to_string(knight.getVidas()) +
+                          " | P2 VIDAS: " + std::to_string(knight2.getVidas());
+            }
+            else
+            {
+                hudText = "NIVEL: " + std::to_string(nivelActual) + 
+                          " | VIDAS: " + std::to_string(knight.getVidas()) + 
+                          " | ENEMIGOS: " + std::to_string(listaEnemigos.size());
+            }
             textoHUD.setString(hudText);
         }
 
@@ -1899,6 +2070,10 @@ int main()
         }
         
         knight.draw(window);
+        if (modoActual == MULTIJUGADOR)
+        {
+            knight2.draw(window);
+        }
 
         // RENDER HUD (FASE 5)
         if (fuenteCargada)

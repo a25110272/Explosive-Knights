@@ -194,31 +194,34 @@ Knight::Knight(sf::Vector2f position, PhysicsSpace& physics, const std::string& 
 
 Knight::~Knight() = default;
 
-void Knight::handleInput()
+void Knight::handleInput(sf::Keyboard::Key teclaArriba,
+                         sf::Keyboard::Key teclaAbajo,
+                         sf::Keyboard::Key teclaDerecha,
+                         sf::Keyboard::Key teclaIzquierda)
 {
     b2Vec2 velocity = {0.0f, 0.0f};
     Direccion dirActual = static_cast<Direccion>(direccionActual);
     bool seMovio = false;
 
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::W))
+    if (sf::Keyboard::isKeyPressed(teclaArriba))
     {
         velocity.y = -speed;
         dirActual = ARRIBA;
         seMovio = true;
     }
-    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::S))
+    else if (sf::Keyboard::isKeyPressed(teclaAbajo))
     {
         velocity.y = speed;
         dirActual = ABAJO;
         seMovio = true;
     }
-    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::D))
+    else if (sf::Keyboard::isKeyPressed(teclaDerecha))
     {
         velocity.x = speed;
         dirActual = DERECHA;
         seMovio = true;
     }
-    else if (sf::Keyboard::isKeyPressed(sf::Keyboard::A))
+    else if (sf::Keyboard::isKeyPressed(teclaIzquierda))
     {
         velocity.x = -speed;
         dirActual = IZQUIERDA;
@@ -344,8 +347,8 @@ void Knight::recibirDano(PhysicsSpace& physics)
 
     if (vidas > 0)
     {
-        float posX = 1.0f * 64.0f + 32.0f;
-        float posY = 1.0f * 64.0f + 32.0f;
+        float posX = posicionOriginal.x;
+        float posY = posicionOriginal.y;
 
         if (b2Body_IsValid(bodyId))
         {
@@ -375,6 +378,8 @@ void Knight::configurarBomba(const std::string& ruta, sf::Color color)
 
 void Knight::reiniciar(float x, float y)
 {
+    posicionOriginal = sf::Vector2f(x, y);
+
     if (b2Body_IsValid(bodyId))
     {
         b2Transform transform = {{x / PIXELS_PER_METER, y / PIXELS_PER_METER}, b2Rot_identity};
