@@ -29,7 +29,8 @@ enum EstadoJuego
     SELECCION_PERSONAJE,
     JUGANDO,
     GAME_OVER,
-    VICTORIA
+    VICTORIA,
+    VICTORIA_VERSUS
 };
 
 enum ModoJuego
@@ -1779,6 +1780,23 @@ sf::Vector2f obtenerSpawnVersus(int personaje)
     }
 }
 
+std::string obtenerRutaGanadorVersus(int personaje)
+{
+    const std::string rutas[4] = {
+        "assets/images/Ganador_verde.png",
+        "assets/images/Ganador_rojo.png",
+        "assets/images/Ganador_azul.png",
+        "assets/images/Ganador_negro.png"
+    };
+
+    if (personaje < 0 || personaje >= 4)
+    {
+        return rutas[0];
+    }
+
+    return rutas[personaje];
+}
+
 int main()
 {
     sf::RenderWindow window(sf::VideoMode(960, 832), "Explosive-Knights - FASE 5");
@@ -1821,6 +1839,11 @@ int main()
     int modoSeleccionado = 0;
     int personajeSeleccionadoP1 = 0;
     int personajeSeleccionadoP2 = 2;
+    int ganadorVersus = 0;
+    int personajeGanadorVersus = 0;
+    sf::Texture texturaGanadorVersus;
+    sf::Sprite spriteGanadorVersus;
+    bool texturaGanadorVersusCargada = false;
 
     // SISTEMA DE AUDIO (FASE 1)
     sf::Music musicaFondo;
@@ -1875,6 +1898,16 @@ int main()
         textoVictoria.setPosition(960.0f / 2.0f - textoVictoria.getLocalBounds().width / 2.0f, 832.0f / 2.0f - 60.0f);
     }
 
+    sf::Text textoVictoriaVersus;
+    if (fuenteCargada)
+    {
+        textoVictoriaVersus.setFont(fuente);
+        textoVictoriaVersus.setCharacterSize(54);
+        textoVictoriaVersus.setFillColor(sf::Color::Yellow);
+        textoVictoriaVersus.setOutlineColor(sf::Color::Black);
+        textoVictoriaVersus.setOutlineThickness(4.0f);
+    }
+
     sf::Text textoInstruccion;
     if (fuenteCargada)
     {
@@ -1885,7 +1918,58 @@ int main()
         textoInstruccion.setPosition(960.0f / 2.0f - textoInstruccion.getLocalBounds().width / 2.0f, 832.0f / 2.0f + 60.0f);
     }
 
+    sf::Text textoVolverMenu;
+    if (fuenteCargada)
+    {
+        textoVolverMenu.setFont(fuente);
+        textoVolverMenu.setCharacterSize(24);
+        textoVolverMenu.setFillColor(sf::Color::White);
+        textoVolverMenu.setOutlineColor(sf::Color::Black);
+        textoVolverMenu.setOutlineThickness(2.0f);
+        textoVolverMenu.setString("Presiona ENTER para volver al menu");
+        textoVolverMenu.setPosition(960.0f / 2.0f - textoVolverMenu.getLocalBounds().width / 2.0f, 760.0f);
+    }
+
     const float timeStep = 1.0f / 60.0f;  // 60 FPS
+
+    auto volverAlMenuPrincipal = [&]()
+    {
+        for (auto& bomba : listaBombas)
+        {
+            bomba.destruirFisica();
+        }
+
+        for (auto& enemigo : listaEnemigos)
+        {
+            enemigo.destruir(physics);
+        }
+
+        for (auto& jefe : listaJefes)
+        {
+            jefe.destruir(physics);
+        }
+
+        listaBombas.clear();
+        listaEnemigos.clear();
+        listaExplosiones.clear();
+        listaItems.clear();
+        temporizadoresRespawnItems.clear();
+        listaJefes.clear();
+
+        mapa.cargarFondo("assets/images/Mapa.png");
+        mapa.inicializarGrid();
+        mapa.generarFisicas(physics);
+
+        knight.reiniciar(96.0f, 96.0f);
+        knight2.reiniciar(-500.0f, -500.0f);
+        modoActual = ARCADE;
+        nivelActual = 1;
+        ganadorVersus = 0;
+        personajeGanadorVersus = 0;
+        texturaGanadorVersusCargada = false;
+        pantallaSeleccion.setModoMultijugador(false);
+        estadoActual = MENU_PRINCIPAL;
+    };
 
     while (window.isOpen())
     {
@@ -2002,9 +2086,13 @@ int main()
                 {
                     knight.plantarBomba(mapa, listaBombas, physics, 1);
                 }
-                if (event.key.code == sf::Keyboard::Numpad5 && estadoActual == JUGANDO && modoActual == MULTIJUGADOR)
+                if (event.key.code == sf::Keyboard::Numpad0 && estadoActual == JUGANDO && modoActual == MULTIJUGADOR)
                 {
                     knight2.plantarBomba(mapa, listaBombas, physics, 2);
+                }
+                if (event.key.code == sf::Keyboard::Return && estadoActual == VICTORIA_VERSUS)
+                {
+                    volverAlMenuPrincipal();
                 }
                 // Reiniciar con Enter si es GAME_OVER o VICTORIA (FASE 5)
                 if (event.key.code == sf::Keyboard::Return && (estadoActual == GAME_OVER || estadoActual == VICTORIA))
@@ -2256,7 +2344,37 @@ int main()
         if (estadoActual == JUGANDO)
         {
             // Verificar si el jugador murió
-            if (knight.getVidas() <= 0 || (modoActual == MULTIJUGADOR && knight2.getVidas() <= 0))
+            if (modoActual == MULTIJUGADOR && knight.getVidas() <= 0)
+            {
+                ganadorVersus = 2;
+                personajeGanadorVersus = personajeSeleccionadoP2;
+                texturaGanadorVersusCargada = texturaGanadorVersus.loadFromFile(obtenerRutaGanadorVersus(personajeGanadorVersus));
+                if (texturaGanadorVersusCargada)
+                {
+                    spriteGanadorVersus.setTexture(texturaGanadorVersus, true);
+                    sf::FloatRect bounds = spriteGanadorVersus.getLocalBounds();
+                    spriteGanadorVersus.setOrigin(bounds.left + bounds.width / 2.0f, bounds.top + bounds.height / 2.0f);
+                    spriteGanadorVersus.setPosition(480.0f, 430.0f);
+                }
+                estadoActual = VICTORIA_VERSUS;
+                std::cout << "PLAYER 2 GANA" << std::endl;
+            }
+            else if (modoActual == MULTIJUGADOR && knight2.getVidas() <= 0)
+            {
+                ganadorVersus = 1;
+                personajeGanadorVersus = personajeSeleccionadoP1;
+                texturaGanadorVersusCargada = texturaGanadorVersus.loadFromFile(obtenerRutaGanadorVersus(personajeGanadorVersus));
+                if (texturaGanadorVersusCargada)
+                {
+                    spriteGanadorVersus.setTexture(texturaGanadorVersus, true);
+                    sf::FloatRect bounds = spriteGanadorVersus.getLocalBounds();
+                    spriteGanadorVersus.setOrigin(bounds.left + bounds.width / 2.0f, bounds.top + bounds.height / 2.0f);
+                    spriteGanadorVersus.setPosition(480.0f, 430.0f);
+                }
+                estadoActual = VICTORIA_VERSUS;
+                std::cout << "PLAYER 1 GANA" << std::endl;
+            }
+            else if (modoActual == ARCADE && knight.getVidas() <= 0)
             {
                 estadoActual = GAME_OVER;
                 std::cout << "GAME OVER - Presiona ENTER para reiniciar" << std::endl;
@@ -2519,6 +2637,29 @@ int main()
                     window.draw(textoVictoria);
                 }
                 window.draw(textoInstruccion);
+            }
+        }
+
+        if (estadoActual == VICTORIA_VERSUS)
+        {
+            sf::RectangleShape overlay(sf::Vector2f(960.0f, 832.0f));
+            overlay.setFillColor(sf::Color(0, 0, 0, 180));
+            window.draw(overlay);
+
+            if (texturaGanadorVersusCargada)
+            {
+                window.draw(spriteGanadorVersus);
+            }
+
+            if (fuenteCargada)
+            {
+                textoVictoriaVersus.setString(std::string("\xC2\xA1PLAYER ") + std::to_string(ganadorVersus) + " GANA!");
+                textoVictoriaVersus.setPosition(
+                    480.0f - textoVictoriaVersus.getLocalBounds().width / 2.0f,
+                    120.0f
+                );
+                window.draw(textoVictoriaVersus);
+                window.draw(textoVolverMenu);
             }
         }
 
