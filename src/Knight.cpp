@@ -15,18 +15,7 @@ public:
 
         cambiarTextura(rutaTextura);
 
-        sprite.setTextureRect(sf::IntRect(
-            0,
-            0,
-            frameWidth,
-            frameHeight
-        ));
-
-        centrarSprite();
-
         sprite.setPosition(position);
-        float escala = 64.0f / static_cast<float>(frameWidth);
-        sprite.setScale(escala, escala);
     }
 
     void cambiarTextura(const std::string& rutaTextura)
@@ -37,14 +26,25 @@ public:
             return;
         }
 
+        sf::Vector2u size = textura.getSize();
+        frameWidth = static_cast<int>(size.x) / numFrames;
+        frameHeight = static_cast<int>(size.y) / 4;
+        currentFrame = 0;
+        direccion = ABAJO;
+        caminando = false;
+        caminandoAnterior = false;
+        clock.restart();
+
         sprite.setTexture(this->textura);
         sprite.setTextureRect(sf::IntRect(
             currentFrame * frameWidth,
             obtenerFilaDireccion() * frameHeight,
             frameWidth,
-            frameHeight
+            frameHeight - 2
         ));
         centrarSprite();
+        float escala = 64.0f / static_cast<float>(frameWidth);
+        sprite.setScale(escala, escala);
     }
 
     void move(float offsetX, float offsetY, Direccion nuevaDireccion)
@@ -72,7 +72,7 @@ public:
             0,
             fila * frameHeight,
             frameWidth,
-            frameHeight
+            frameHeight - 2
         ));
 
         centrarSprite();
@@ -114,7 +114,7 @@ public:
             currentFrame * frameWidth,
             fila * frameHeight,
             frameWidth,
-            frameHeight
+            frameHeight - 2
         ));
 
         centrarSprite();
@@ -172,7 +172,7 @@ private:
     }
 };
 
-Knight::Knight(sf::Vector2f position, PhysicsSpace& physics, const std::string& rutaTextura)
+Knight::Knight(sf::Vector2f position, PhysicsSpace& physics, const std::string& rutaTextura, int idJugador)
     : personaje(std::make_unique<Personaje>(position, rutaTextura)),
       physicsSpace(physics),
       maxBombas(1),
@@ -180,12 +180,15 @@ Knight::Knight(sf::Vector2f position, PhysicsSpace& physics, const std::string& 
       speed(6.5f),
       speedOriginal(6.5f),
       vidas(3),
-      tiempoInvulnerable(0.0f)
+      tiempoInvulnerable(0.0f),
+      idJugador(idJugador)
 {
     bodyId = physicsSpace.createDynamicCircleBody(
         position.x,
         position.y,
-        KNIGHT_COLLISION_RADIUS
+        KNIGHT_COLLISION_RADIUS,
+        COLLISION_PLAYER,
+        COLLISION_ALL & ~COLLISION_PLAYER
     );
 
     posicionOriginal = position;
@@ -193,6 +196,18 @@ Knight::Knight(sf::Vector2f position, PhysicsSpace& physics, const std::string& 
 }
 
 Knight::~Knight() = default;
+
+void Knight::handleInput()
+{
+    if (idJugador == 2)
+    {
+        handleInput(sf::Keyboard::Up, sf::Keyboard::Down, sf::Keyboard::Right, sf::Keyboard::Left);
+    }
+    else
+    {
+        handleInput(sf::Keyboard::W, sf::Keyboard::S, sf::Keyboard::D, sf::Keyboard::A);
+    }
+}
 
 void Knight::handleInput(sf::Keyboard::Key teclaArriba,
                          sf::Keyboard::Key teclaAbajo,

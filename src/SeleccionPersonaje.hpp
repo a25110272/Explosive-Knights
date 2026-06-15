@@ -35,6 +35,7 @@ private:
     sf::Text etiquetaP1;
     sf::Text etiquetaP2;
     sf::Text instrucciones;
+    int jugadorEligiendo;
     int personajeSeleccionadoP1;
     int personajeSeleccionadoP2;
     bool confirmarSeleccion;

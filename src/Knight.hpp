@@ -16,13 +16,15 @@ class Knight
 {
 public:
     Knight(sf::Vector2f position, PhysicsSpace& physics,
-           const std::string& rutaTextura = "assets/images/verde_spritesheet.png");
+           const std::string& rutaTextura = "assets/images/Verde_spritesheet.png",
+           int idJugador = 1);
     ~Knight();
 
-    void handleInput(sf::Keyboard::Key teclaArriba = sf::Keyboard::W,
-                     sf::Keyboard::Key teclaAbajo = sf::Keyboard::S,
-                     sf::Keyboard::Key teclaDerecha = sf::Keyboard::D,
-                     sf::Keyboard::Key teclaIzquierda = sf::Keyboard::A);
+    void handleInput();
+    void handleInput(sf::Keyboard::Key teclaArriba,
+                     sf::Keyboard::Key teclaAbajo,
+                     sf::Keyboard::Key teclaDerecha,
+                     sf::Keyboard::Key teclaIzquierda);
     void syncWithPhysics();
     void update(float deltaTime);
     void draw(sf::RenderWindow& window);
@@ -53,6 +55,7 @@ private:
     sf::Vector2f posicionOriginal;
     int vidas;
     float tiempoInvulnerable;
+    int idJugador;
 };
 
 #endif

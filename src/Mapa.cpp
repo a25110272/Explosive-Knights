@@ -37,6 +37,17 @@ Mapa::~Mapa()
     limpiarFisicas();
 }
 
+bool Mapa::cargarFondo(const std::string& ruta)
+{
+    mapaBaseCargado = texturaMapaBase.loadFromFile(ruta);
+    if (!mapaBaseCargado)
+    {
+        std::cout << "Error: no se pudo cargar " << ruta << std::endl;
+    }
+
+    return mapaBaseCargado;
+}
+
 void Mapa::inicializarGrid()
 {
     bloquesEnDestruccion.clear();

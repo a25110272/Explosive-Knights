@@ -13,7 +13,8 @@ const float SELECCION_SELECTOR_X[4] = {
 };
 
 SeleccionPersonaje::SeleccionPersonaje()
-    : personajeSeleccionadoP1(0),
+    : jugadorEligiendo(1),
+      personajeSeleccionadoP1(0),
       personajeSeleccionadoP2(2),
       confirmarSeleccion(false),
       fondoCargado(false),
@@ -85,6 +86,7 @@ void SeleccionPersonaje::setModoMultijugador(bool activo)
 {
     modoMultijugador = activo;
     confirmarSeleccion = false;
+    jugadorEligiendo = 1;
     update();
 }
 
@@ -97,25 +99,27 @@ void SeleccionPersonaje::handleInput(sf::Event& event)
 
     if (modoMultijugador)
     {
-        if (event.key.code == sf::Keyboard::A)
+        int& seleccionActiva = (jugadorEligiendo == 1) ? personajeSeleccionadoP1 : personajeSeleccionadoP2;
+
+        if (event.key.code == sf::Keyboard::Left || event.key.code == sf::Keyboard::A)
         {
-            moverSeleccion(personajeSeleccionadoP1, -1);
+            moverSeleccion(seleccionActiva, -1);
         }
-        else if (event.key.code == sf::Keyboard::D)
+        else if (event.key.code == sf::Keyboard::Right || event.key.code == sf::Keyboard::D)
         {
-            moverSeleccion(personajeSeleccionadoP1, 1);
-        }
-        else if (event.key.code == sf::Keyboard::Left)
-        {
-            moverSeleccion(personajeSeleccionadoP2, -1);
-        }
-        else if (event.key.code == sf::Keyboard::Right)
-        {
-            moverSeleccion(personajeSeleccionadoP2, 1);
+            moverSeleccion(seleccionActiva, 1);
         }
         else if (event.key.code == sf::Keyboard::Return)
         {
-            confirmarSeleccion = true;
+            if (jugadorEligiendo == 1)
+            {
+                jugadorEligiendo = 2;
+                update();
+            }
+            else
+            {
+                confirmarSeleccion = true;
+            }
         }
     }
     else
@@ -149,7 +153,7 @@ void SeleccionPersonaje::update()
 
         if (modoMultijugador)
         {
-            instrucciones.setString("P1: A/D  |  P2: Flechas  |  Enter para jugar");
+            instrucciones.setString("Jugador " + std::to_string(jugadorEligiendo) + " eligiendo  |  Flechas/A-D  |  Enter para confirmar");
         }
         else
         {
@@ -205,7 +209,7 @@ int SeleccionPersonaje::getPersonajeSeleccionadoP2() const
 std::string SeleccionPersonaje::getRutaTexturaPersonaje(int personaje) const
 {
     const std::string rutasPersonajes[4] = {
-        "assets/images/verde_spritesheet.png",
+        "assets/images/Verde_spritesheet.png",
         "assets/images/Rojo_spritesheet.png",
         "assets/images/Azul_spritesheet.png",
         "assets/images/Negro_spritesheet.png"
@@ -227,6 +231,8 @@ bool SeleccionPersonaje::seleccionConfirmada() const
 void SeleccionPersonaje::limpiarConfirmacion()
 {
     confirmarSeleccion = false;
+    jugadorEligiendo = 1;
+    update();
 }
 
 void SeleccionPersonaje::moverSeleccion(int& personaje, int direccion)

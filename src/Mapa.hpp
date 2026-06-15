@@ -4,6 +4,7 @@
 #include <SFML/Graphics.hpp>
 #include <box2d/box2d.h>
 #include <map>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -22,6 +23,7 @@ public:
     ~Mapa();
 
     void inicializarGrid();
+    bool cargarFondo(const std::string& ruta);
     void generarFisicas(PhysicsSpace& physics);
     void update(float deltaTime);
     void draw(sf::RenderWindow& window);

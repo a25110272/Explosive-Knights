@@ -215,20 +215,9 @@ public:
 
         cambiarTextura(rutaTextura);
 
-        sprite.setTextureRect(sf::IntRect(
-            0,
-            0,
-            frameWidth,
-            frameHeight
-        ));
-
-        centrarSprite();
-
         sprite.setPosition(position);
 
         // Cambia esto si se ve muy grande o muy pequeño
-        float escala = MAP_CELL_SIZE / static_cast<float>(frameWidth);
-        sprite.setScale(escala, escala);
     }
 
     void cambiarTextura(const std::string& rutaTextura)
@@ -239,14 +228,25 @@ public:
             return;
         }
 
+        sf::Vector2u size = textura.getSize();
+        frameWidth = static_cast<int>(size.x) / numFrames;
+        frameHeight = static_cast<int>(size.y) / 4;
+        currentFrame = 0;
+        direccion = ABAJO;
+        caminando = false;
+        caminandoAnterior = false;
+        clock.restart();
+
         sprite.setTexture(this->textura);
         sprite.setTextureRect(sf::IntRect(
             currentFrame * frameWidth,
             obtenerFilaDireccion() * frameHeight,
             frameWidth,
-            frameHeight
+            frameHeight - 2
         ));
         centrarSprite();
+        float escala = MAP_CELL_SIZE / static_cast<float>(frameWidth);
+        sprite.setScale(escala, escala);
     }
 
     void move(float offsetX, float offsetY, Direccion nuevaDireccion)
@@ -276,7 +276,7 @@ public:
             0,  // Frame 0 (reposo)
             fila * frameHeight,
             frameWidth,
-            frameHeight
+            frameHeight - 2
         ));
 
         centrarSprite();
@@ -323,7 +323,7 @@ public:
             currentFrame * frameWidth,
             fila * frameHeight,
             frameWidth,
-            frameHeight
+            frameHeight - 2
         ));
 
         centrarSprite();
@@ -851,12 +851,13 @@ class Knight
 {
 public:
     Knight(sf::Vector2f position, PhysicsSpace& physics,
-           const std::string& rutaTextura = "assets/images/verde_spritesheet.png")
+           const std::string& rutaTextura = "assets/images/Verde_spritesheet.png",
+           int idJugador = 1)
         : personaje(position, rutaTextura), physicsSpace(physics), 
           maxBombas(1), rangoFuego(1), speed(6.5f),
           speedOriginal(6.5f), vidas(3), tiempoInvulnerable(0.0f),
           tiempoBombaExtra(0.0f), tiempoEscudo(0.0f), tiempoFantasma(0.0f),
-          tiempoVelocidad(0.0f), ignorandoDestructibles(false)
+          tiempoVelocidad(0.0f), ignorandoDestructibles(false), idJugador(idJugador)
     {
         // Crear cuerpo dinámico en Box2D v3.0
         bodyId = physicsSpace.createDynamicCircleBody(
@@ -864,16 +865,28 @@ public:
             position.y, 
             KNIGHT_COLLISION_RADIUS,
             COLLISION_PLAYER,
-            COLLISION_ALL
+            COLLISION_ALL & ~COLLISION_PLAYER
         );
         
         posicionOriginal = position;
     }
 
-    void handleInput(sf::Keyboard::Key teclaArriba = sf::Keyboard::W,
-                     sf::Keyboard::Key teclaAbajo = sf::Keyboard::S,
-                     sf::Keyboard::Key teclaDerecha = sf::Keyboard::D,
-                     sf::Keyboard::Key teclaIzquierda = sf::Keyboard::A)
+    void handleInput()
+    {
+        if (idJugador == 2)
+        {
+            handleInput(sf::Keyboard::Up, sf::Keyboard::Down, sf::Keyboard::Right, sf::Keyboard::Left);
+        }
+        else
+        {
+            handleInput(sf::Keyboard::W, sf::Keyboard::S, sf::Keyboard::D, sf::Keyboard::A);
+        }
+    }
+
+    void handleInput(sf::Keyboard::Key teclaArriba,
+                     sf::Keyboard::Key teclaAbajo,
+                     sf::Keyboard::Key teclaDerecha,
+                     sf::Keyboard::Key teclaIzquierda)
     {
         // Usar la velocidad del Knight (modificable por power-ups)
         
@@ -1163,7 +1176,9 @@ private:
 
         std::vector<b2ShapeId> shapes(cantidadShapes);
         int shapesLeidas = b2Body_GetShapes(bodyId, shapes.data(), cantidadShapes);
-        uint32_t maskBits = activo ? (COLLISION_ALL & ~COLLISION_DESTRUCTIBLE) : COLLISION_ALL;
+        uint32_t maskBits = activo
+            ? (COLLISION_ALL & ~COLLISION_DESTRUCTIBLE & ~COLLISION_PLAYER)
+            : (COLLISION_ALL & ~COLLISION_PLAYER);
 
         for (int i = 0; i < shapesLeidas; i++)
         {
@@ -1194,6 +1209,7 @@ private:
     float tiempoFantasma;
     float tiempoVelocidad;
     bool ignorandoDestructibles;
+    int idJugador;
 };
 
 // ============== FIN KNIGHT - Box2D v3.0 ==============
@@ -1747,6 +1763,22 @@ void cargarNivel(int nivel, Mapa& mapa, Knight& knight, std::vector<Enemigo>& en
 
 // ============== FIN FUNCIÓN CARGAR NIVEL ==============
 
+sf::Vector2f obtenerSpawnVersus(int personaje)
+{
+    switch (personaje)
+    {
+    case 1:
+        return sf::Vector2f(96.0f, 96.0f);
+    case 2:
+        return sf::Vector2f(864.0f, 96.0f);
+    case 3:
+        return sf::Vector2f(96.0f, 736.0f);
+    case 0:
+    default:
+        return sf::Vector2f(864.0f, 736.0f);
+    }
+}
+
 int main()
 {
     sf::RenderWindow window(sf::VideoMode(960, 832), "Explosive-Knights - FASE 5");
@@ -1763,8 +1795,8 @@ int main()
     // Instanciar Mapa
     Mapa mapa;
     // Instanciar Knight (jugador)
-    Knight knight(sf::Vector2f(96.0f, 96.0f), physics);
-    Knight knight2(sf::Vector2f(-500.0f, -500.0f), physics, "assets/images/Azul_spritesheet.png");
+    Knight knight(sf::Vector2f(96.0f, 96.0f), physics, "assets/images/Verde_spritesheet.png", 1);
+    Knight knight2(sf::Vector2f(-500.0f, -500.0f), physics, "assets/images/Azul_spritesheet.png", 2);
 
     // Vector de bombas (FASE 2)
     std::vector<Bomba> listaBombas;
@@ -1787,6 +1819,8 @@ int main()
     SeleccionPersonaje pantallaSeleccion;
     pantallaSeleccion.init();
     int modoSeleccionado = 0;
+    int personajeSeleccionadoP1 = 0;
+    int personajeSeleccionadoP2 = 2;
 
     // SISTEMA DE AUDIO (FASE 1)
     sf::Music musicaFondo;
@@ -1902,6 +1936,8 @@ int main()
                 {
                     int personajeP1 = pantallaSeleccion.getPersonajeSeleccionadoP1();
                     int personajeP2 = pantallaSeleccion.getPersonajeSeleccionadoP2();
+                    personajeSeleccionadoP1 = personajeP1;
+                    personajeSeleccionadoP2 = personajeP2;
 
                     knight.cambiarSprite(pantallaSeleccion.getRutaTexturaPersonaje(personajeP1));
                     knight2.cambiarSprite(pantallaSeleccion.getRutaTexturaPersonaje(personajeP2));
@@ -1912,6 +1948,7 @@ int main()
                     {
                         estadoActual = JUGANDO;
                         nivelActual = 1;
+                        mapa.cargarFondo("assets/images/Mapa.png");
                         knight.reiniciar(96.0f, 96.0f);
                         knight2.reiniciar(-500.0f, -500.0f);
                         temporizadoresRespawnItems.clear();
@@ -1941,11 +1978,15 @@ int main()
                         temporizadoresRespawnItems.clear();
                         listaJefes.clear();
 
+                        mapa.cargarFondo("assets/images/Mapa_Versus.png");
                         mapa.inicializarGrid();
                         mapa.generarFisicas(physics);
                         llenarItemsIniciales(mapa, listaItems);
-                        knight.reiniciar(96.0f, 96.0f);
-                        knight2.reiniciar(864.0f, 736.0f);
+
+                        sf::Vector2f spawnP1 = obtenerSpawnVersus(personajeP1);
+                        sf::Vector2f spawnP2 = obtenerSpawnVersus(personajeP2);
+                        knight.reiniciar(spawnP1.x, spawnP1.y);
+                        knight2.reiniciar(spawnP2.x, spawnP2.y);
                         nivelActual = 1;
                         estadoActual = JUGANDO;
                     }
@@ -1961,7 +2002,7 @@ int main()
                 {
                     knight.plantarBomba(mapa, listaBombas, physics, 1);
                 }
-                if (event.key.code == sf::Keyboard::Return && estadoActual == JUGANDO && modoActual == MULTIJUGADOR)
+                if (event.key.code == sf::Keyboard::Numpad5 && estadoActual == JUGANDO && modoActual == MULTIJUGADOR)
                 {
                     knight2.plantarBomba(mapa, listaBombas, physics, 2);
                 }
@@ -1994,14 +2035,18 @@ int main()
                         temporizadoresRespawnItems.clear();
                         listaJefes.clear();
 
+                        mapa.cargarFondo("assets/images/Mapa_Versus.png");
                         mapa.inicializarGrid();
                         mapa.generarFisicas(physics);
                         llenarItemsIniciales(mapa, listaItems);
-                        knight.reiniciar(96.0f, 96.0f);
-                        knight2.reiniciar(864.0f, 736.0f);
+                        sf::Vector2f spawnP1 = obtenerSpawnVersus(personajeSeleccionadoP1);
+                        sf::Vector2f spawnP2 = obtenerSpawnVersus(personajeSeleccionadoP2);
+                        knight.reiniciar(spawnP1.x, spawnP1.y);
+                        knight2.reiniciar(spawnP2.x, spawnP2.y);
                     }
                     else
                     {
+                        mapa.cargarFondo("assets/images/Mapa.png");
                         knight.reiniciar(96.0f, 96.0f);
                         knight2.reiniciar(-500.0f, -500.0f);
                         temporizadoresRespawnItems.clear();
@@ -2032,7 +2077,7 @@ int main()
         knight.handleInput();
         if (modoActual == MULTIJUGADOR)
         {
-            knight2.handleInput(sf::Keyboard::Up, sf::Keyboard::Down, sf::Keyboard::Right, sf::Keyboard::Left);
+            knight2.handleInput();
         }
 
         // PHYSICS STEP (Box2D v3.0)
