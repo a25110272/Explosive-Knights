@@ -564,7 +564,8 @@ public:
     Explosion(int centroFila, int centroCol, Mapa& mapa, int rango = 2,
               std::vector<PowerUp>* pItems = nullptr,
               sf::Color colorBase = sf::Color(255, 165, 0, 200))
-        : colorBase(colorBase), activa(true), pListaItems(pItems)
+        : centroFila(centroFila), centroCol(centroCol), colorBase(colorBase),
+          activa(true), pListaItems(pItems)
     {
         // Añadir el centro
         celdasAfectadas.push_back({centroFila, centroCol});
@@ -687,24 +688,20 @@ public:
 
     void draw(sf::RenderWindow& window)
     {
-        if (activa)
+        if (!activa)
         {
-            float progreso = temporizador.getElapsedTime().asSeconds() / DURACION_EXPLOSION;
-            if (progreso > 1.0f)
-            {
-                progreso = 1.0f;
-            }
+            return;
+        }
 
-            sf::Color colorActual = colorBase;
-            colorActual.a = static_cast<sf::Uint8>(std::max(0.0f, static_cast<float>(colorBase.a) * (1.0f - progreso)));
+        float progreso = temporizador.getElapsedTime().asSeconds() / DURACION_EXPLOSION;
+        if (progreso > 1.0f)
+        {
+            progreso = 1.0f;
+        }
 
-            for (const auto& celda : celdasAfectadas)
-            {
-                sf::RectangleShape fuego(sf::Vector2f(64.0f, 64.0f));
-                fuego.setFillColor(colorActual);
-                fuego.setPosition(celda.y * 64.0f, celda.x * 64.0f);
-                window.draw(fuego);
-            }
+        for (const auto& celda : celdasAfectadas)
+        {
+            dibujarCeldaFuego(window, celda.x, celda.y, progreso);
         }
     }
 
@@ -714,6 +711,126 @@ public:
 
 private:
     static constexpr float DURACION_EXPLOSION = Mapa::DURACION_DESTRUCCION_BLOQUE;
+
+    bool existeCelda(int fila, int col) const
+    {
+        return std::find(celdasAfectadas.begin(), celdasAfectadas.end(), sf::Vector2i(fila, col)) != celdasAfectadas.end();
+    }
+
+    sf::Color conAlpha(sf::Color color, float alpha) const
+    {
+        alpha = std::max(0.0f, std::min(255.0f, alpha));
+        color.a = static_cast<sf::Uint8>(alpha);
+        return color;
+    }
+
+    sf::Color mezclarColor(sf::Color a, sf::Color b, float t) const
+    {
+        t = std::max(0.0f, std::min(1.0f, t));
+        return sf::Color(
+            static_cast<sf::Uint8>(a.r + (b.r - a.r) * t),
+            static_cast<sf::Uint8>(a.g + (b.g - a.g) * t),
+            static_cast<sf::Uint8>(a.b + (b.b - a.b) * t),
+            static_cast<sf::Uint8>(a.a + (b.a - a.a) * t)
+        );
+    }
+
+    void dibujarCirculo(sf::RenderWindow& window, sf::Vector2f centro, float radio, sf::Color color) const
+    {
+        sf::CircleShape circulo(radio, 28);
+        circulo.setOrigin(radio, radio);
+        circulo.setPosition(centro);
+        circulo.setFillColor(color);
+        window.draw(circulo);
+    }
+
+    void dibujarRectCentro(sf::RenderWindow& window, sf::Vector2f centro, sf::Vector2f tamano, sf::Color color) const
+    {
+        sf::RectangleShape rect(tamano);
+        rect.setOrigin(tamano.x / 2.0f, tamano.y / 2.0f);
+        rect.setPosition(centro);
+        rect.setFillColor(color);
+        window.draw(rect);
+    }
+
+    void dibujarCapaFuego(sf::RenderWindow& window, sf::Vector2f centro, int dx, int dy,
+                          bool esCentro, bool esPunta, float escala, sf::Color color) const
+    {
+        float largo = MAP_CELL_SIZE * escala;
+        float grosor = (esCentro ? 58.0f : 34.0f) * escala;
+
+        if (esCentro)
+        {
+            dibujarCirculo(window, centro, 30.0f * escala, color);
+            dibujarRectCentro(window, centro, sf::Vector2f(58.0f * escala, 28.0f * escala), color);
+            dibujarRectCentro(window, centro, sf::Vector2f(28.0f * escala, 58.0f * escala), color);
+            return;
+        }
+
+        if (dx != 0)
+        {
+            dibujarRectCentro(window, centro, sf::Vector2f(largo, grosor), color);
+            dibujarCirculo(window, centro, grosor * 0.5f, color);
+            if (esPunta)
+            {
+                dibujarCirculo(window, sf::Vector2f(centro.x + dx * 20.0f * escala, centro.y), grosor * 0.72f, color);
+            }
+        }
+        else
+        {
+            dibujarRectCentro(window, centro, sf::Vector2f(grosor, largo), color);
+            dibujarCirculo(window, centro, grosor * 0.5f, color);
+            if (esPunta)
+            {
+                dibujarCirculo(window, sf::Vector2f(centro.x, centro.y + dy * 20.0f * escala), grosor * 0.72f, color);
+            }
+        }
+    }
+
+    void dibujarCeldaFuego(sf::RenderWindow& window, int fila, int col, float progreso) const
+    {
+        int dx = col - centroCol;
+        int dy = fila - centroFila;
+        bool esCentro = (dx == 0 && dy == 0);
+        int dirX = (dx > 0) - (dx < 0);
+        int dirY = (dy > 0) - (dy < 0);
+        bool esPunta = !esCentro && !existeCelda(fila + dirY, col + dirX);
+
+        float entrada = std::min(1.0f, progreso / 0.18f);
+        float salida = progreso > 0.68f ? (1.0f - progreso) / 0.32f : 1.0f;
+        salida = std::max(0.0f, std::min(1.0f, salida));
+        float pulso = 0.92f + 0.12f * std::sin(progreso * 3.14159265f * 3.0f);
+        float escala = entrada * salida * pulso;
+        float alpha = 235.0f * salida;
+
+        sf::Vector2f centro(
+            col * MAP_CELL_SIZE + MAP_CELL_SIZE / 2.0f,
+            fila * MAP_CELL_SIZE + MAP_CELL_SIZE / 2.0f
+        );
+
+        sf::Color bordePersonaje = mezclarColor(sf::Color(255, 88, 16), colorBase, 0.18f);
+        sf::Color exterior = conAlpha(bordePersonaje, alpha * 0.78f);
+        sf::Color medio = conAlpha(sf::Color(255, 144, 24), alpha * 0.90f);
+        sf::Color interior = conAlpha(sf::Color(255, 232, 84), alpha);
+        sf::Color nucleo = conAlpha(sf::Color(255, 255, 230), alpha);
+
+        dibujarCapaFuego(window, centro, dx, dy, esCentro, esPunta, escala * 1.06f, exterior);
+        dibujarCapaFuego(window, centro, dx, dy, esCentro, esPunta, escala * 0.78f, medio);
+        dibujarCapaFuego(window, centro, dx, dy, esCentro, esPunta, escala * 0.48f, interior);
+
+        if (esCentro)
+        {
+            dibujarCirculo(window, centro, 11.0f * escala, nucleo);
+        }
+        else if (esPunta)
+        {
+            dibujarCirculo(window, sf::Vector2f(centro.x + dirX * 13.0f * escala, centro.y + dirY * 13.0f * escala),
+                           8.0f * escala, nucleo);
+        }
+    }
+
+    int centroFila;
+    int centroCol;
     std::vector<sf::Vector2i> celdasAfectadas;
     sf::Clock temporizador;
     sf::Color colorBase;
@@ -901,8 +1018,33 @@ public:
             // Dibujar círculo negro (radio 24px)
             if (texturaCargada)
             {
+                float tiempo = temporizador.getElapsedTime().asSeconds();
+                float alerta = std::max(0.0f, std::min(1.0f, (tiempo - 2.0f) / 1.0f));
+                float pulso = 1.0f + (0.06f + alerta * 0.08f) * std::sin(tiempo * (8.0f + alerta * 8.0f));
+                sf::Vector2u size = textura.getSize();
+                sprite.setScale(
+                    (MAP_CELL_SIZE / static_cast<float>(size.x)) * pulso,
+                    (MAP_CELL_SIZE / static_cast<float>(size.y)) * pulso
+                );
+                sprite.setColor(sf::Color(
+                    255,
+                    static_cast<sf::Uint8>(255 - alerta * 35.0f),
+                    static_cast<sf::Uint8>(255 - alerta * 35.0f),
+                    255
+                ));
                 sprite.setPosition(posX, posY);
                 window.draw(sprite);
+
+                if (alerta > 0.05f)
+                {
+                    float chispaRadio = 3.0f + 3.0f * std::abs(std::sin(tiempo * 18.0f));
+                    sf::CircleShape chispa(chispaRadio, 14);
+                    chispa.setOrigin(chispaRadio, chispaRadio);
+                    chispa.setFillColor(sf::Color(255, 230, 80, static_cast<sf::Uint8>(180.0f * alerta)));
+                    chispa.setPosition(posX + 14.0f, posY - 22.0f);
+                    window.draw(chispa);
+                }
+
                 return;
             }
 
