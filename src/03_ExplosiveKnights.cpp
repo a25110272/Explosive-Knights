@@ -2350,10 +2350,10 @@ sf::Vector2f obtenerSpawnVersus(int personaje)
 std::string obtenerRutaGanadorVersus(int personaje)
 {
     const std::string rutas[4] = {
-        "assets/images/Ganador_verde.png",
-        "assets/images/Ganador_rojo.png",
-        "assets/images/Ganador_azul.png",
-        "assets/images/Ganador_negro.png"
+        "assets/images/Victoria_verde.png",
+        "assets/images/Victoria_rojo.png",
+        "assets/images/Victoria_azul.png",
+        "assets/images/Victoria_negro.png"
     };
 
     if (personaje < 0 || personaje >= 4)
@@ -2657,7 +2657,7 @@ int main()
         textoVolverMenu.setCharacterSize(24);
         textoVolverMenu.setFillColor(sf::Color::White);
         textoVolverMenu.setOutlineColor(sf::Color::Black);
-        textoVolverMenu.setOutlineThickness(2.0f);
+        textoVolverMenu.setOutlineThickness(3.0f);
         textoVolverMenu.setString("Presiona ENTER para volver al menu");
         textoVolverMenu.setPosition(960.0f / 2.0f - textoVolverMenu.getLocalBounds().width / 2.0f, 760.0f);
     }
@@ -2719,9 +2719,16 @@ int main()
         if (texturaGanadorVersusCargada)
         {
             spriteGanadorVersus.setTexture(texturaGanadorVersus, true);
-            sf::FloatRect bounds = spriteGanadorVersus.getLocalBounds();
-            spriteGanadorVersus.setOrigin(bounds.left + bounds.width / 2.0f, bounds.top + bounds.height / 2.0f);
-            spriteGanadorVersus.setPosition(480.0f, 430.0f);
+            sf::Vector2u size = texturaGanadorVersus.getSize();
+            if (size.x > 0 && size.y > 0)
+            {
+                spriteGanadorVersus.setOrigin(0.0f, 0.0f);
+                spriteGanadorVersus.setPosition(0.0f, 0.0f);
+                spriteGanadorVersus.setScale(
+                    960.0f / static_cast<float>(size.x),
+                    832.0f / static_cast<float>(size.y)
+                );
+            }
         }
 
         estadoActual = VICTORIA_VERSUS;
@@ -3670,10 +3677,6 @@ int main()
 
         if (estadoActual == VICTORIA_VERSUS)
         {
-            sf::RectangleShape overlay(sf::Vector2f(960.0f, 832.0f));
-            overlay.setFillColor(sf::Color(0, 0, 0, 180));
-            window.draw(overlay);
-
             if (texturaGanadorVersusCargada)
             {
                 window.draw(spriteGanadorVersus);
@@ -3681,11 +3684,19 @@ int main()
 
             if (fuenteCargada)
             {
-                textoVictoriaVersus.setString(std::string("\xC2\xA1PLAYER ") + std::to_string(ganadorVersus) + " GANA!");
+                textoVictoriaVersus.setString(std::string("PLAYER ") + std::to_string(ganadorVersus) + " GANA!");
+                sf::FloatRect victoriaBounds = textoVictoriaVersus.getLocalBounds();
                 textoVictoriaVersus.setPosition(
-                    480.0f - textoVictoriaVersus.getLocalBounds().width / 2.0f,
-                    120.0f
+                    480.0f - victoriaBounds.left - victoriaBounds.width / 2.0f,
+                    692.0f
                 );
+
+                sf::FloatRect volverBounds = textoVolverMenu.getLocalBounds();
+                textoVolverMenu.setPosition(
+                    480.0f - volverBounds.left - volverBounds.width / 2.0f,
+                    792.0f
+                );
+
                 window.draw(textoVictoriaVersus);
                 window.draw(textoVolverMenu);
             }
