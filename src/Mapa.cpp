@@ -168,6 +168,52 @@ void Mapa::destruirBloque(int fila, int columna, std::vector<PowerUp>* pItems)
     }
 }
 
+bool Mapa::colocarBloqueIndestructible(int fila, int columna, PhysicsSpace& physics)
+{
+    if (fila < 0 || fila >= 13 || columna < 0 || columna >= 15)
+    {
+        return false;
+    }
+
+    if (grid[fila][columna] == INDESTRUCTIBLE)
+    {
+        return false;
+    }
+
+    auto cuerpo = bodiesMap.find({fila, columna});
+    if (cuerpo != bodiesMap.end())
+    {
+        b2BodyId bodyId = cuerpo->second;
+        if (b2Body_IsValid(bodyId))
+        {
+            b2DestroyBody(bodyId);
+        }
+        bodiesMap.erase(cuerpo);
+    }
+
+    auto bloque = bloquesEnDestruccion.begin();
+    while (bloque != bloquesEnDestruccion.end())
+    {
+        if (bloque->fila == fila && bloque->columna == columna)
+        {
+            bloque = bloquesEnDestruccion.erase(bloque);
+        }
+        else
+        {
+            ++bloque;
+        }
+    }
+
+    grid[fila][columna] = INDESTRUCTIBLE;
+
+    float posX = columna * 64.0f + 32.0f;
+    float posY = fila * 64.0f + 32.0f;
+    b2BodyId bodyId = physics.createStaticBody(posX, posY, WALL_HITBOX_SIZE, WALL_HITBOX_SIZE, COLLISION_INDESTRUCTIBLE);
+    bodiesMap[{fila, columna}] = bodyId;
+
+    return true;
+}
+
 void Mapa::update(float deltaTime)
 {
     auto bloque = bloquesEnDestruccion.begin();

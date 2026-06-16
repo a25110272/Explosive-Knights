@@ -10,6 +10,8 @@
 #include <cstdlib>
 #include <ctime>
 #include <cmath>
+#include <iomanip>
+#include <sstream>
 #include <utility>
 #include "Mapa.hpp"
 #include "Menu.hpp"
@@ -67,6 +69,8 @@ const float DURACION_ESCUDO_VERSUS = 15.0f;
 const float TIEMPO_RESPAWN_ITEM = 20.0f;
 const float INCREMENTO_VELOCIDAD_VERSUS = 1.0f;
 const float VELOCIDAD_BOMBA_PATEADA = 8.0f;
+const float DURACION_RONDA_VERSUS = 180.0f;
+const float INTERVALO_CAIDA_MUERTE_SUBITA = 0.5f;
 
 class PhysicsSpace
 {
@@ -848,7 +852,7 @@ public:
           const std::string& rutaTextura = "assets/images/Bomba_Verde.png")
         : fila(fila), columna(columna), activa(true), jugadorEncima(true), solida(false),
           enMovimiento(false), direccionMovimiento(ABAJO), rangoFuego(rangoFuego), propietario(propietario),
-          bodyId(b2_nullBodyId), shapeId(b2_nullShapeId), texturaCargada(false)
+          bodyId(b2_nullBodyId), shapeId(b2_nullShapeId), texturaCargada(false), explosionForzada(false)
     {
         cargarTextura(rutaTextura);
         // Calcular posición en píxeles: centro de la celda
@@ -891,7 +895,7 @@ public:
           rangoFuego(otra.rangoFuego), propietario(otra.propietario),
           bodyId(otra.bodyId), shapeId(otra.shapeId),
           textura(std::move(otra.textura)), sprite(std::move(otra.sprite)),
-          texturaCargada(otra.texturaCargada), temporizador(std::move(otra.temporizador))
+          texturaCargada(otra.texturaCargada), explosionForzada(otra.explosionForzada), temporizador(std::move(otra.temporizador))
     {
         enlazarSpriteATextura();
         otra.bodyId = b2_nullBodyId;
@@ -919,6 +923,7 @@ public:
             textura = std::move(otra.textura);
             sprite = std::move(otra.sprite);
             texturaCargada = otra.texturaCargada;
+            explosionForzada = otra.explosionForzada;
             temporizador = std::move(otra.temporizador);
             enlazarSpriteATextura();
 
@@ -979,7 +984,7 @@ public:
             actualizarCeldaDesdeFisica();
         }
 
-        if (activa && temporizador.getElapsedTime().asSeconds() >= 3.0f)
+        if (activa && (explosionForzada || temporizador.getElapsedTime().asSeconds() >= 3.0f))
         {
             activa = false;
             
@@ -1154,6 +1159,8 @@ public:
     int getRangoFuego() const { return rangoFuego; }
     int getPropietario() const { return propietario; }
     b2BodyId getBodyId() const { return bodyId; }
+    bool estaEnCelda(int f, int c) const { return fila == f && columna == c; }
+    void forzarExplosion() { explosionForzada = true; }
 
 private:
     void cargarTextura(const std::string& rutaTextura)
@@ -1209,6 +1216,7 @@ private:
     sf::Texture textura;
     sf::Sprite sprite;
     bool texturaCargada;
+    bool explosionForzada;
     sf::Clock temporizador;
 };
 
@@ -2363,6 +2371,63 @@ void intentarPatearBombas(Knight& jugador, std::vector<Bomba>& bombas)
     }
 }
 
+std::vector<sf::Vector2i> generarPatronMuerteSubita()
+{
+    std::vector<sf::Vector2i> patron;
+    int top = 1;
+    int bottom = 11;
+    int left = 1;
+    int right = 13;
+
+    while (top <= bottom && left <= right)
+    {
+        for (int columna = left; columna <= right; columna++)
+            patron.push_back({top, columna});
+        top++;
+
+        for (int fila = top; fila <= bottom; fila++)
+            patron.push_back({fila, right});
+        right--;
+
+        if (top <= bottom)
+        {
+            for (int columna = right; columna >= left; columna--)
+                patron.push_back({bottom, columna});
+            bottom--;
+        }
+
+        if (left <= right)
+        {
+            for (int fila = bottom; fila >= top; fila--)
+                patron.push_back({fila, left});
+            left++;
+        }
+    }
+
+    return patron;
+}
+
+std::string formatearTiempo(float segundos)
+{
+    int total = static_cast<int>(std::ceil(std::max(0.0f, segundos)));
+    int minutos = total / 60;
+    int segundosRestantes = total % 60;
+
+    std::ostringstream stream;
+    stream << std::setfill('0') << std::setw(2) << minutos
+           << ":" << std::setw(2) << segundosRestantes;
+    return stream.str();
+}
+
+sf::Vector2i obtenerCeldaBody(b2BodyId bodyId)
+{
+    sf::Vector2f centro = obtenerCentroBody(bodyId);
+    return sf::Vector2i(
+        static_cast<int>(centro.y / MAP_CELL_SIZE),
+        static_cast<int>(centro.x / MAP_CELL_SIZE)
+    );
+}
+
 int main()
 {
     sf::RenderWindow window(sf::VideoMode(960, 832), "Explosive-Knights - FASE 5");
@@ -2410,6 +2475,11 @@ int main()
     int personajeGanadorVersus = 0;
     bool reinicioRondaPendiente = false;
     int perdedorRondaPendiente = 0;
+    float tiempoRonda = DURACION_RONDA_VERSUS;
+    bool muerteSubita = false;
+    float caidaTimer = INTERVALO_CAIDA_MUERTE_SUBITA;
+    std::size_t indiceCaidaMuerteSubita = 0;
+    std::vector<sf::Vector2i> patronMuerteSubita = generarPatronMuerteSubita();
     sf::Texture texturaGanadorVersus;
     sf::Sprite spriteGanadorVersus;
     bool texturaGanadorVersusCargada = false;
@@ -2444,6 +2514,17 @@ int main()
         textoHUD.setCharacterSize(20);
         textoHUD.setFillColor(sf::Color::White);
         textoHUD.setPosition(10.0f, 10.0f);
+    }
+
+    sf::Text textoTiempoVersus;
+    if (fuenteCargada)
+    {
+        textoTiempoVersus.setFont(fuente);
+        textoTiempoVersus.setCharacterSize(32);
+        textoTiempoVersus.setFillColor(sf::Color::White);
+        textoTiempoVersus.setOutlineColor(sf::Color::Black);
+        textoTiempoVersus.setOutlineThickness(3.0f);
+        textoTiempoVersus.setString("03:00");
     }
 
     sf::Text textoGameOver;
@@ -2537,6 +2618,10 @@ int main()
         personajeGanadorVersus = 0;
         reinicioRondaPendiente = false;
         perdedorRondaPendiente = 0;
+        tiempoRonda = DURACION_RONDA_VERSUS;
+        muerteSubita = false;
+        caidaTimer = INTERVALO_CAIDA_MUERTE_SUBITA;
+        indiceCaidaMuerteSubita = 0;
         corazonesSpawneados = 0;
         texturaGanadorVersusCargada = false;
         pantallaSeleccion.setModoMultijugador(false);
@@ -2595,6 +2680,10 @@ int main()
         knight2.reiniciarRonda(spawnP2.x, spawnP2.y);
         reinicioRondaPendiente = false;
         perdedorRondaPendiente = 0;
+        tiempoRonda = DURACION_RONDA_VERSUS;
+        muerteSubita = false;
+        caidaTimer = INTERVALO_CAIDA_MUERTE_SUBITA;
+        indiceCaidaMuerteSubita = 0;
         estadoActual = JUGANDO;
         std::cout << "RONDA VERSUS REINICIADA" << std::endl;
     };
@@ -2616,6 +2705,66 @@ int main()
         }
 
         reiniciarRondaVersus();
+    };
+
+    auto colocarSiguienteBloqueMuerteSubita = [&]()
+    {
+        while (indiceCaidaMuerteSubita < patronMuerteSubita.size())
+        {
+            sf::Vector2i celda = patronMuerteSubita[indiceCaidaMuerteSubita++];
+            int fila = celda.x;
+            int columna = celda.y;
+
+            if (mapa.obtenerTipoCelda(fila, columna) == Mapa::INDESTRUCTIBLE)
+            {
+                continue;
+            }
+
+            sf::Vector2i celdaP1 = obtenerCeldaBody(knight.getBodyId());
+            sf::Vector2i celdaP2 = obtenerCeldaBody(knight2.getBodyId());
+            bool aplastaP1 = celdaP1.x == fila && celdaP1.y == columna;
+            bool aplastaP2 = celdaP2.x == fila && celdaP2.y == columna;
+
+            if (aplastaP1)
+            {
+                knight.setVidas(0);
+            }
+            if (aplastaP2)
+            {
+                knight2.setVidas(0);
+            }
+
+            for (auto& bomba : listaBombas)
+            {
+                if (bomba.isActiva() && bomba.estaEnCelda(fila, columna))
+                {
+                    bomba.forzarExplosion();
+                }
+            }
+
+            auto item = listaItems.begin();
+            while (item != listaItems.end())
+            {
+                if (item->estaEnCelda(fila, columna))
+                {
+                    item = listaItems.erase(item);
+                }
+                else
+                {
+                    ++item;
+                }
+            }
+
+            mapa.colocarBloqueIndestructible(fila, columna, physics);
+
+            if (estadoActual == JUGANDO && (aplastaP1 || aplastaP2))
+            {
+                reinicioRondaPendiente = true;
+                perdedorRondaPendiente = aplastaP1 ? 1 : 2;
+            }
+
+            break;
+        }
     };
 
     while (window.isOpen())
@@ -2720,6 +2869,10 @@ int main()
                         sf::Vector2f spawnP2 = obtenerSpawnVersus(personajeP2);
                         knight.reiniciar(spawnP1.x, spawnP1.y);
                         knight2.reiniciar(spawnP2.x, spawnP2.y);
+                        tiempoRonda = DURACION_RONDA_VERSUS;
+                        muerteSubita = false;
+                        caidaTimer = INTERVALO_CAIDA_MUERTE_SUBITA;
+                        indiceCaidaMuerteSubita = 0;
                         nivelActual = 1;
                         estadoActual = JUGANDO;
                     }
@@ -2889,6 +3042,29 @@ int main()
         }
 
         mapa.update(timeStep);
+
+        if (estadoActual == JUGANDO && modoActual == MULTIJUGADOR && !reinicioRondaPendiente)
+        {
+            if (!muerteSubita)
+            {
+                tiempoRonda -= timeStep;
+                if (tiempoRonda <= 0.0f)
+                {
+                    tiempoRonda = 0.0f;
+                    muerteSubita = true;
+                    caidaTimer = 0.0f;
+                }
+            }
+            else
+            {
+                caidaTimer -= timeStep;
+                if (caidaTimer <= 0.0f)
+                {
+                    caidaTimer = INTERVALO_CAIDA_MUERTE_SUBITA;
+                    colocarSiguienteBloqueMuerteSubita();
+                }
+            }
+        }
 
         auto respawnItem = temporizadoresRespawnItems.begin();
         while (modoActual != MULTIJUGADOR && respawnItem != temporizadoresRespawnItems.end())
@@ -3265,6 +3441,17 @@ int main()
                           " | ENEMIGOS: " + std::to_string(listaEnemigos.size());
             }
             textoHUD.setString(hudText);
+
+            if (modoActual == MULTIJUGADOR)
+            {
+                textoTiempoVersus.setString(formatearTiempo(tiempoRonda));
+                textoTiempoVersus.setFillColor(muerteSubita ? sf::Color::Red : sf::Color::White);
+                sf::FloatRect boundsTiempo = textoTiempoVersus.getLocalBounds();
+                textoTiempoVersus.setPosition(
+                    480.0f - boundsTiempo.width / 2.0f,
+                    8.0f
+                );
+            }
         }
 
         // RENDER
@@ -3315,6 +3502,7 @@ int main()
             if (modoActual == MULTIJUGADOR)
             {
                 dibujarItemsActivosHUD(window, knight2, fuente, "P2", 10.0f, 78.0f);
+                window.draw(textoTiempoVersus);
             }
         }
 
