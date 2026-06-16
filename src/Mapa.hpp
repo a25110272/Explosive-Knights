@@ -30,6 +30,7 @@ public:
     void draw(sf::RenderWindow& window);
     int obtenerTipoCelda(int fila, int columna) const;
     void destruirBloque(int fila, int columna, std::vector<PowerUp>* pItems = nullptr);
+    bool colocarBloqueIndestructible(int fila, int columna, PhysicsSpace& physics);
     int getCellType(int fila, int col) const;
 
 private:
