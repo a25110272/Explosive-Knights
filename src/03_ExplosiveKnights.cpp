@@ -64,7 +64,8 @@ const uint32_t COLLISION_DESTRUCTIBLE = 0x0010;
 const uint32_t COLLISION_ALL = 0xFFFFFFFF;
 const int MAX_ITEMS_ACTIVOS = 3;
 const int PROBABILIDAD_ITEM_DESTRUCTIBLE = 70;
-const int MAX_CORAZONES_POR_MAPA = 2;
+const int MAX_CORAZONES_POR_MAPA = 1;
+const int PROBABILIDAD_CORAZON = 8;
 const float DURACION_ITEM_TEMPORAL = 10.0f;
 const float DURACION_ESCUDO_VERSUS = 15.0f;
 const float TIEMPO_RESPAWN_ITEM = 20.0f;
@@ -1267,6 +1268,28 @@ bool forzarBombasTocadasPorExplosion(const Explosion& explosion, std::vector<Bom
     return algunaForzada;
 }
 
+void destruirItemsTocadosPorExplosion(const Explosion& explosion, std::vector<PowerUp>& items)
+{
+    const auto& celdas = explosion.getCeldasAfectadas();
+
+    for (auto& item : items)
+    {
+        if (!item.isActivo() || !item.estaVisible())
+        {
+            continue;
+        }
+
+        for (const auto& celda : celdas)
+        {
+            if (item.estaEnCelda(celda.x, celda.y))
+            {
+                item.desactivar();
+                break;
+            }
+        }
+    }
+}
+
 // ============== KNIGHT (JUGADOR) - Box2D v3.0 ==============
 class Knight
 {
@@ -2094,19 +2117,23 @@ bool celdaTieneItemActivo(const std::vector<PowerUp>& items, int fila, int colum
 
 int seleccionarTipoItemBalanceado(int& corazonesSpawneados)
 {
-    int tipo = rand() % ITEM_TOTAL;
-    if (tipo == ITEM_VIDA)
+    int roll = rand() % 100;
+    if (roll < PROBABILIDAD_CORAZON && corazonesSpawneados < MAX_CORAZONES_POR_MAPA)
     {
-        if (corazonesSpawneados < MAX_CORAZONES_POR_MAPA)
-        {
-            corazonesSpawneados++;
-            return ITEM_VIDA;
-        }
-
-        return (rand() % 2 == 0) ? ITEM_BOMBA_EXTRA : ITEM_VELOCIDAD;
+        corazonesSpawneados++;
+        return ITEM_VIDA;
     }
 
-    return tipo;
+    const int itemsComunes[] = {
+        ITEM_BOMBA_EXTRA,
+        ITEM_FLAMA,
+        ITEM_VELOCIDAD,
+        ITEM_ESCUDO,
+        ITEM_FANTASMA,
+        ITEM_PATEAR
+    };
+
+    return itemsComunes[rand() % 6];
 }
 
 bool colocarItemOcultoAleatorio(Mapa& mapa, std::vector<PowerUp>& items, int& corazonesSpawneados)
@@ -3125,6 +3152,7 @@ int main()
                 {
                     revisarCadenaBombas = true;
                 }
+                destruirItemsTocadosPorExplosion(explosion, listaItems);
                 listaExplosiones.push_back(explosion);
             }
             bomba.actualizarMovimientoPateado(mapa);
