@@ -16,6 +16,9 @@
 #include "Mapa.hpp"
 #include "Menu.hpp"
 #include "SeleccionPersonaje.hpp"
+#include "MenuArcadePlayers.hpp"
+#include "Puerta.hpp"
+#include "GestorArcade.hpp"
 
 enum Direccion
 {
@@ -29,10 +32,15 @@ enum Direccion
 enum EstadoJuego
 {
     MENU_PRINCIPAL,
+    MENU_ARCADE_PLAYERS,
     SELECCION_PERSONAJE,
+    SELECCION_ARCADE,
     JUGANDO,
+    JUGANDO_ARCADE,
+    TRANSICION_NIVEL,
     GAME_OVER,
     VICTORIA,
+    VICTORIA_ARCADE,
     VICTORIA_VERSUS,
     EMPATE_VERSUS
 };
@@ -565,6 +573,8 @@ std::array<bool, ITEM_TOTAL> PowerUp::texturasIntentadas = {false, false, false,
 #include "Mapa.cpp"
 #include "Menu.cpp"
 #include "SeleccionPersonaje.cpp"
+#include "MenuArcadePlayers.cpp"
+#include "Puerta.cpp"
 
 // ============== EXPLOSIÓN (FASE 3: Explosiones y Destrucción) ==============
 class Explosion
@@ -2331,6 +2341,8 @@ void cargarNivel(int nivel, Mapa& mapa, Knight& knight, std::vector<Enemigo>& en
 
 // ============== FIN FUNCIÓN CARGAR NIVEL ==============
 
+#include "GestorArcade.cpp"
+
 sf::Vector2f obtenerSpawnVersus(int personaje)
 {
     switch (personaje)
@@ -2545,9 +2557,15 @@ int main()
 
     Menu menu;
     menu.init();
+    MenuArcadePlayers menuArcadePlayers;
+    menuArcadePlayers.init();
     SeleccionPersonaje pantallaSeleccion;
     pantallaSeleccion.init();
+    Puerta puertaSalida;
+    puertaSalida.init();
+    GestorArcade gestorArcade;
     int modoSeleccionado = 0;
+    int jugadoresArcade = 1;
     int personajeSeleccionadoP1 = 0;
     int personajeSeleccionadoP2 = 2;
     int ganadorVersus = 0;
@@ -2565,6 +2583,21 @@ int main()
     sf::Texture texturaEmpateVersus;
     sf::Sprite spriteEmpateVersus;
     bool texturaEmpateVersusCargada = false;
+    sf::Texture texturaVictoriaArcade;
+    sf::Sprite spriteVictoriaArcade;
+    bool texturaVictoriaArcadeCargada = texturaVictoriaArcade.loadFromFile("assets/images/CONGRATULATIONS.png");
+    if (texturaVictoriaArcadeCargada)
+    {
+        spriteVictoriaArcade.setTexture(texturaVictoriaArcade, true);
+        sf::Vector2u size = texturaVictoriaArcade.getSize();
+        if (size.x > 0 && size.y > 0)
+        {
+            spriteVictoriaArcade.setScale(
+                960.0f / static_cast<float>(size.x),
+                832.0f / static_cast<float>(size.y)
+            );
+        }
+    }
 
     // SISTEMA DE AUDIO (FASE 1)
     sf::Music musicaFondo;
@@ -2689,6 +2722,7 @@ int main()
         listaJefes.clear();
 
         mapa.cargarFondo("assets/images/Mapa.png");
+        mapa.setTemaObjetos(-1);
         mapa.inicializarGrid();
         mapa.generarFisicas(physics);
 
@@ -2707,6 +2741,8 @@ int main()
         corazonesSpawneados = 0;
         texturaGanadorVersusCargada = false;
         texturaEmpateVersusCargada = false;
+        puertaSalida.ocultar();
+        mapa.setTemaObjetos(-1);
         pantallaSeleccion.setModoMultijugador(false);
         estadoActual = MENU_PRINCIPAL;
     };
@@ -2775,6 +2811,7 @@ int main()
         listaJefes.clear();
 
         mapa.cargarFondo("assets/images/Mapa_Versus.png");
+        mapa.setTemaObjetos(-1);
         mapa.inicializarGrid();
         mapa.generarFisicas(physics);
         llenarItemsIniciales(mapa, listaItems, corazonesSpawneados);
@@ -2899,6 +2936,17 @@ int main()
         }
     };
 
+    auto estaEnGameplay = [&]()
+    {
+        return estadoActual == JUGANDO || estadoActual == JUGANDO_ARCADE;
+    };
+
+    auto segundoJugadorActivo = [&]()
+    {
+        return modoActual == MULTIJUGADOR ||
+               (estadoActual == JUGANDO_ARCADE && gestorArcade.esCooperativo());
+    };
+
     while (window.isOpen())
     {
         sf::Event event;
@@ -2922,8 +2970,7 @@ int main()
                     {
                         modoSeleccionado = opcion;
                         modoActual = ARCADE;
-                        pantallaSeleccion.setModoMultijugador(false);
-                        estadoActual = SELECCION_PERSONAJE;
+                        estadoActual = MENU_ARCADE_PLAYERS;
                     }
                     else if (opcion == 1)
                     {
@@ -2941,7 +2988,21 @@ int main()
                 continue;
             }
 
-            if (estadoActual == SELECCION_PERSONAJE)
+            if (estadoActual == MENU_ARCADE_PLAYERS)
+            {
+                menuArcadePlayers.handleInput(event);
+                if (menuArcadePlayers.seleccionConfirmada())
+                {
+                    jugadoresArcade = menuArcadePlayers.getCantidadJugadores();
+                    menuArcadePlayers.limpiarConfirmacion();
+                    pantallaSeleccion.setModoMultijugador(jugadoresArcade == 2);
+                    estadoActual = SELECCION_ARCADE;
+                }
+
+                continue;
+            }
+
+            if (estadoActual == SELECCION_PERSONAJE || estadoActual == SELECCION_ARCADE)
             {
                 pantallaSeleccion.handleInput(event);
                 if (pantallaSeleccion.seleccionConfirmada())
@@ -2958,15 +3019,26 @@ int main()
                     pantallaSeleccion.limpiarConfirmacion();
                     std::cout << "P1 seleccionado: " << personajeP1 << " | P2 seleccionado: " << personajeP2 << std::endl;
 
-                    if (modoActual == ARCADE)
+                    if (estadoActual == SELECCION_ARCADE)
                     {
-                        estadoActual = JUGANDO;
-                        nivelActual = 1;
-                        mapa.cargarFondo("assets/images/Mapa.png");
-                        knight.reiniciar(96.0f, 96.0f);
-                        knight2.reiniciar(-500.0f, -500.0f);
+                        modoActual = ARCADE;
+                        gestorArcade.iniciar(jugadoresArcade);
                         temporizadoresRespawnItems.clear();
-                        cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics, corazonesSpawneados);
+                        gestorArcade.cargarNivelActual(
+                            mapa,
+                            physics,
+                            knight,
+                            knight2,
+                            listaEnemigos,
+                            listaJefes,
+                            listaBombas,
+                            listaExplosiones,
+                            listaItems,
+                            puertaSalida,
+                            corazonesSpawneados
+                        );
+                        nivelActual = gestorArcade.getNivelActual();
+                        estadoActual = JUGANDO_ARCADE;
                     }
                     else if (modoActual == MULTIJUGADOR)
                     {
@@ -2993,6 +3065,7 @@ int main()
                         listaJefes.clear();
 
                         mapa.cargarFondo("assets/images/Mapa_Versus.png");
+                        mapa.setTemaObjetos(-1);
                         mapa.inicializarGrid();
                         mapa.generarFisicas(physics);
                         llenarItemsIniciales(mapa, listaItems, corazonesSpawneados);
@@ -3016,16 +3089,16 @@ int main()
             // Manejar input de Espacio para plantar bomba (FASE 2)
             if (event.type == sf::Event::KeyPressed)
             {
-                if (event.key.code == sf::Keyboard::Space && estadoActual == JUGANDO)
+                if (event.key.code == sf::Keyboard::Space && estaEnGameplay())
                 {
                     knight.plantarBomba(mapa, listaBombas, physics, 1);
                 }
-                if (event.key.code == sf::Keyboard::Numpad0 && estadoActual == JUGANDO && modoActual == MULTIJUGADOR)
+                if (event.key.code == sf::Keyboard::Numpad0 && estaEnGameplay() && segundoJugadorActivo())
                 {
                     knight2.plantarBomba(mapa, listaBombas, physics, 2);
                 }
                 if (event.key.code == sf::Keyboard::Return &&
-                    (estadoActual == VICTORIA_VERSUS || estadoActual == EMPATE_VERSUS))
+                    (estadoActual == VICTORIA_VERSUS || estadoActual == EMPATE_VERSUS || estadoActual == VICTORIA_ARCADE))
                 {
                     volverAlMenuPrincipal();
                 }
@@ -3059,6 +3132,7 @@ int main()
                         listaJefes.clear();
 
                         mapa.cargarFondo("assets/images/Mapa_Versus.png");
+                        mapa.setTemaObjetos(-1);
                         mapa.inicializarGrid();
                         mapa.generarFisicas(physics);
                         llenarItemsIniciales(mapa, listaItems, corazonesSpawneados);
@@ -3069,11 +3143,23 @@ int main()
                     }
                     else
                     {
-                        mapa.cargarFondo("assets/images/Mapa.png");
-                        knight.reiniciar(96.0f, 96.0f);
-                        knight2.reiniciar(-500.0f, -500.0f);
+                        gestorArcade.iniciar(jugadoresArcade);
                         temporizadoresRespawnItems.clear();
-                        cargarNivel(nivelActual, mapa, knight, listaEnemigos, listaBombas, listaExplosiones, listaItems, listaJefes, physics, corazonesSpawneados);
+                        gestorArcade.cargarNivelActual(
+                            mapa,
+                            physics,
+                            knight,
+                            knight2,
+                            listaEnemigos,
+                            listaJefes,
+                            listaBombas,
+                            listaExplosiones,
+                            listaItems,
+                            puertaSalida,
+                            corazonesSpawneados
+                        );
+                        nivelActual = gestorArcade.getNivelActual();
+                        estadoActual = JUGANDO_ARCADE;
                     }
                 }
             }
@@ -3087,7 +3173,15 @@ int main()
             continue;
         }
 
-        if (estadoActual == SELECCION_PERSONAJE)
+        if (estadoActual == MENU_ARCADE_PLAYERS)
+        {
+            window.clear(sf::Color(18, 20, 28));
+            menuArcadePlayers.draw(window);
+            window.display();
+            continue;
+        }
+
+        if (estadoActual == SELECCION_PERSONAJE || estadoActual == SELECCION_ARCADE)
         {
             pantallaSeleccion.update();
             window.clear(sf::Color(22, 24, 34));
@@ -3096,9 +3190,72 @@ int main()
             continue;
         }
 
+        if (estadoActual == TRANSICION_NIVEL)
+        {
+            if (gestorArcade.consumirSolicitudAvance())
+            {
+                gestorArcade.cargarNivelActual(
+                    mapa,
+                    physics,
+                    knight,
+                    knight2,
+                    listaEnemigos,
+                    listaJefes,
+                    listaBombas,
+                    listaExplosiones,
+                    listaItems,
+                    puertaSalida,
+                    corazonesSpawneados
+                );
+                nivelActual = gestorArcade.getNivelActual();
+                temporizadoresRespawnItems.clear();
+                estadoActual = JUGANDO_ARCADE;
+            }
+            else
+            {
+                estadoActual = VICTORIA_ARCADE;
+            }
+
+            continue;
+        }
+
+        if (estadoActual == VICTORIA_ARCADE)
+        {
+            window.clear(sf::Color(10, 10, 16));
+            if (texturaVictoriaArcadeCargada)
+            {
+                window.draw(spriteVictoriaArcade);
+            }
+
+            if (fuenteCargada)
+            {
+                textoVictoria.setString("CONGRATULATIONS");
+                sf::FloatRect victoriaBounds = textoVictoria.getLocalBounds();
+                textoVictoria.setPosition(
+                    480.0f - victoriaBounds.left - victoriaBounds.width / 2.0f,
+                    260.0f
+                );
+                textoVolverMenu.setString("Presiona ENTER para volver al menu");
+                sf::FloatRect volverBounds = textoVolverMenu.getLocalBounds();
+                textoVolverMenu.setPosition(
+                    480.0f - volverBounds.left - volverBounds.width / 2.0f,
+                    792.0f
+                );
+
+                if (!texturaVictoriaArcadeCargada)
+                {
+                    window.draw(textoVictoria);
+                }
+                window.draw(textoVolverMenu);
+            }
+
+            window.display();
+            continue;
+        }
+
         // INPUT
         knight.handleInput();
-        if (modoActual == MULTIJUGADOR)
+        if (segundoJugadorActivo())
         {
             knight2.handleInput();
         }
@@ -3108,14 +3265,14 @@ int main()
 
         // SYNC GRAPHICS WITH PHYSICS
         knight.syncWithPhysics();
-        if (modoActual == MULTIJUGADOR)
+        if (segundoJugadorActivo())
         {
             knight2.syncWithPhysics();
         }
 
         // UPDATE SPRITES
         knight.update(timeStep);
-        if (modoActual == MULTIJUGADOR)
+        if (segundoJugadorActivo())
         {
             knight2.update(timeStep);
             intentarPatearBombas(knight, listaBombas);
@@ -3124,7 +3281,7 @@ int main()
 
         // UPDATE BOMBAS (FASE 2) + EXPLOSIONES (FASE 3)
         std::vector<b2BodyId> jugadoresBodyId = {knight.getBodyId()};
-        if (modoActual == MULTIJUGADOR)
+        if (segundoJugadorActivo())
         {
             jugadoresBodyId.push_back(knight2.getBodyId());
         }
@@ -3321,24 +3478,55 @@ int main()
         // Ataque de Boss al jugador (FASE 6)
         for (auto& boss : listaJefes)
         {
-            b2Vec2 posKnightBoss = b2Body_GetPosition(knight.getBodyId());
-            float pixelXKnight = posKnightBoss.x * PIXELS_PER_METER;
-            float pixelYKnight = posKnightBoss.y * PIXELS_PER_METER;
-
             b2Vec2 posBoss = b2Body_GetPosition(boss.getBodyId());
             float pixelXBoss = posBoss.x * PIXELS_PER_METER;
             float pixelYBoss = posBoss.y * PIXELS_PER_METER;
 
-            // Distancia euclideana
+            b2Vec2 posKnightBoss = b2Body_GetPosition(knight.getBodyId());
+            float pixelXKnight = posKnightBoss.x * PIXELS_PER_METER;
+            float pixelYKnight = posKnightBoss.y * PIXELS_PER_METER;
             float distancia = std::sqrt((pixelXKnight - pixelXBoss) * (pixelXKnight - pixelXBoss) +
                                         (pixelYKnight - pixelYBoss) * (pixelYKnight - pixelYBoss));
 
-            if (distancia < 64.0f)  // Contacto si distancia < 64px
+            if (distancia < 64.0f)
             {
                 if (knight.recibirDano(physics, modoActual == MULTIJUGADOR) && modoActual == MULTIJUGADOR)
                 {
                     danoVersusP1 = true;
                 }
+            }
+
+            if (segundoJugadorActivo())
+            {
+                b2Vec2 posKnight2Boss = b2Body_GetPosition(knight2.getBodyId());
+                float pixelXKnight2 = posKnight2Boss.x * PIXELS_PER_METER;
+                float pixelYKnight2 = posKnight2Boss.y * PIXELS_PER_METER;
+                float distanciaP2 = std::sqrt((pixelXKnight2 - pixelXBoss) * (pixelXKnight2 - pixelXBoss) +
+                                              (pixelYKnight2 - pixelYBoss) * (pixelYKnight2 - pixelYBoss));
+
+                if (distanciaP2 < 64.0f)
+                {
+                    if (knight2.recibirDano(physics, modoActual == MULTIJUGADOR) && modoActual == MULTIJUGADOR)
+                    {
+                        danoVersusP2 = true;
+                    }
+                }
+            }
+        }
+
+        if (estadoActual == JUGANDO_ARCADE)
+        {
+            gestorArcade.update(mapa, physics, listaEnemigos, listaJefes, puertaSalida);
+            nivelActual = gestorArcade.getNivelActual();
+
+            if (gestorArcade.consumirVictoriaArcade())
+            {
+                estadoActual = VICTORIA_ARCADE;
+            }
+            else if (knight.getVidas() <= 0 && (!gestorArcade.esCooperativo() || knight2.getVidas() <= 0))
+            {
+                estadoActual = GAME_OVER;
+                std::cout << "GAME OVER ARCADE - Presiona ENTER para reiniciar" << std::endl;
             }
         }
 
@@ -3417,7 +3605,7 @@ int main()
         sf::FloatRect knight2DamageRect;
         int filaKnight2 = -1;
         int colKnight2 = -1;
-        if (modoActual == MULTIJUGADOR)
+        if (segundoJugadorActivo())
         {
             b2Vec2 posKnight2 = b2Body_GetPosition(knight2.getBodyId());
             float pixelXKnight2 = posKnight2.x * PIXELS_PER_METER;
@@ -3432,25 +3620,45 @@ int main()
             );
         }
 
+        if (estadoActual == JUGANDO_ARCADE && puertaSalida.estaAbierta())
+        {
+            bool p1EnPuerta = puertaSalida.jugadorEstaEncima(pixelXKnight, pixelYKnight);
+            bool p2EnPuerta = false;
+            if (segundoJugadorActivo())
+            {
+                b2Vec2 posKnight2Puerta = b2Body_GetPosition(knight2.getBodyId());
+                p2EnPuerta = puertaSalida.jugadorEstaEncima(
+                    posKnight2Puerta.x * PIXELS_PER_METER,
+                    posKnight2Puerta.y * PIXELS_PER_METER
+                );
+            }
+
+            if (p1EnPuerta || p2EnPuerta)
+            {
+                gestorArcade.solicitarAvanceNivel();
+                estadoActual = TRANSICION_NIVEL;
+            }
+        }
+
         // Recopilar items
         for (auto& item : listaItems)
         {
             if (item.isActivo() && item.estaVisible() && item.getFila() == filaKnight && item.getColumna() == colKnight)
             {
-                knight.recolectarItem(item.getTipo(), modoActual == MULTIJUGADOR);
+                knight.recolectarItem(item.getTipo(), modoActual == MULTIJUGADOR || estadoActual == JUGANDO_ARCADE);
                 item.desactivar();
                 if (modoActual != MULTIJUGADOR)
                 {
                     temporizadoresRespawnItems.push_back(TIEMPO_RESPAWN_ITEM);
                 }
             }
-            else if (modoActual == MULTIJUGADOR &&
+            else if (segundoJugadorActivo() &&
                      item.isActivo() &&
                      item.estaVisible() &&
                      item.getFila() == filaKnight2 &&
                      item.getColumna() == colKnight2)
             {
-                knight2.recolectarItem(item.getTipo(), true);
+                knight2.recolectarItem(item.getTipo(), modoActual == MULTIJUGADOR || estadoActual == JUGANDO_ARCADE);
                 item.desactivar();
                 if (modoActual != MULTIJUGADOR)
                 {
@@ -3499,7 +3707,7 @@ int main()
                 }
 
                 // Daño por fuego a P2
-                if (modoActual == MULTIJUGADOR)
+                if (segundoJugadorActivo())
                 {
                     for (const auto& celda : celdasAfectadas)
                     {
@@ -3581,6 +3789,17 @@ int main()
                 hudText = "VERSUS | P1 VIDAS: " + std::to_string(knight.getVidas()) +
                           " | P2 VIDAS: " + std::to_string(knight2.getVidas());
             }
+            else if (estadoActual == JUGANDO_ARCADE)
+            {
+                hudText = "ARCADE NIVEL " + std::to_string(gestorArcade.getNivelActual()) +
+                          " | " + gestorArcade.getNombreNivelActual() +
+                          " | P1 VIDAS: " + std::to_string(knight.getVidas());
+                if (gestorArcade.esCooperativo())
+                {
+                    hudText += " | P2 VIDAS: " + std::to_string(knight2.getVidas());
+                }
+                hudText += " | ENEMIGOS: " + std::to_string(listaEnemigos.size());
+            }
             else
             {
                 hudText = "NIVEL: " + std::to_string(nivelActual) + 
@@ -3604,6 +3823,10 @@ int main()
         // RENDER
         window.clear(sf::Color(35, 35, 45));
         mapa.draw(window);
+        if (estadoActual == JUGANDO_ARCADE || estadoActual == TRANSICION_NIVEL)
+        {
+            puertaSalida.draw(window);
+        }
         
         // RENDER BOMBAS (FASE 2)
         for (auto& bomba : listaBombas)
@@ -3636,7 +3859,7 @@ int main()
         }
         
         knight.draw(window);
-        if (modoActual == MULTIJUGADOR)
+        if (segundoJugadorActivo())
         {
             knight2.draw(window);
         }
@@ -3646,9 +3869,13 @@ int main()
         {
             window.draw(textoHUD);
             dibujarItemsActivosHUD(window, knight, fuente, "P1", 10.0f, 38.0f);
-            if (modoActual == MULTIJUGADOR)
+            if (segundoJugadorActivo())
             {
                 dibujarItemsActivosHUD(window, knight2, fuente, "P2", 10.0f, 78.0f);
+            }
+
+            if (modoActual == MULTIJUGADOR)
+            {
                 window.draw(textoTiempoVersus);
             }
         }

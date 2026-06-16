@@ -5,7 +5,7 @@
 #include <iostream>
 
 Mapa::Mapa()
-    : objetosMapaCargados(false), mapaBaseCargado(false)
+    : objetosMapaCargados(false), mapaBaseCargado(false), temaObjetosActual(-1)
 {
     srand(static_cast<unsigned>(time(0)));
 
@@ -214,6 +214,73 @@ bool Mapa::colocarBloqueIndestructible(int fila, int columna, PhysicsSpace& phys
     return true;
 }
 
+bool Mapa::colocarBloqueDestructible(int fila, int columna, PhysicsSpace& physics)
+{
+    if (fila < 0 || fila >= 13 || columna < 0 || columna >= 15)
+    {
+        return false;
+    }
+
+    if (grid[fila][columna] == INDESTRUCTIBLE)
+    {
+        return false;
+    }
+
+    auto cuerpo = bodiesMap.find({fila, columna});
+    if (cuerpo != bodiesMap.end())
+    {
+        b2BodyId bodyId = cuerpo->second;
+        if (b2Body_IsValid(bodyId))
+        {
+            b2DestroyBody(bodyId);
+        }
+        bodiesMap.erase(cuerpo);
+    }
+
+    grid[fila][columna] = DESTRUCTIBLE;
+
+    float posX = columna * 64.0f + 32.0f;
+    float posY = fila * 64.0f + 32.0f;
+    b2BodyId bodyId = physics.createStaticBody(posX, posY, WALL_HITBOX_SIZE, WALL_HITBOX_SIZE, COLLISION_DESTRUCTIBLE);
+    bodiesMap[{fila, columna}] = bodyId;
+
+    return true;
+}
+
+void Mapa::limpiarBloquesDestructibles(PhysicsSpace& physics)
+{
+    (void)physics;
+
+    bloquesEnDestruccion.clear();
+    for (int fila = 1; fila < 12; fila++)
+    {
+        for (int columna = 1; columna < 14; columna++)
+        {
+            if (grid[fila][columna] != DESTRUCTIBLE && grid[fila][columna] != DESTRUYENDOSE)
+            {
+                continue;
+            }
+
+            grid[fila][columna] = VACIO;
+            auto cuerpo = bodiesMap.find({fila, columna});
+            if (cuerpo != bodiesMap.end())
+            {
+                b2BodyId bodyId = cuerpo->second;
+                if (b2Body_IsValid(bodyId))
+                {
+                    b2DestroyBody(bodyId);
+                }
+                bodiesMap.erase(cuerpo);
+            }
+        }
+    }
+}
+
+void Mapa::setTemaObjetos(int tema)
+{
+    temaObjetosActual = tema;
+}
+
 void Mapa::update(float deltaTime)
 {
     auto bloque = bloquesEnDestruccion.begin();
@@ -344,6 +411,11 @@ void Mapa::calcularRectsObjetos(const sf::Image& imagen)
 
 int Mapa::obtenerFilaTema(int fila, int columna) const
 {
+    if (temaObjetosActual >= 0 && temaObjetosActual < 4)
+    {
+        return temaObjetosActual;
+    }
+
     if (fila < 6 && columna < 7)
         return 0;
     if (fila < 6)

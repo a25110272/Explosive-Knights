@@ -31,6 +31,9 @@ public:
     int obtenerTipoCelda(int fila, int columna) const;
     void destruirBloque(int fila, int columna, std::vector<PowerUp>* pItems = nullptr);
     bool colocarBloqueIndestructible(int fila, int columna, PhysicsSpace& physics);
+    bool colocarBloqueDestructible(int fila, int columna, PhysicsSpace& physics);
+    void limpiarBloquesDestructibles(PhysicsSpace& physics);
+    void setTemaObjetos(int tema);
     int getCellType(int fila, int col) const;
 
 private:
@@ -57,6 +60,7 @@ private:
     std::vector<sf::IntRect> rectsObjetos;
     bool mapaBaseCargado;
     bool objetosMapaCargados;
+    int temaObjetosActual;
 };
 
 #endif
