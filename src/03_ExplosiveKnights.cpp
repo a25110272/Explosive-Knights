@@ -33,7 +33,8 @@ enum EstadoJuego
     JUGANDO,
     GAME_OVER,
     VICTORIA,
-    VICTORIA_VERSUS
+    VICTORIA_VERSUS,
+    EMPATE_VERSUS
 };
 
 enum ModoJuego
@@ -409,7 +410,8 @@ enum TipoPowerUp
     ITEM_VELOCIDAD = 3,
     ITEM_VIDA = 4,
     ITEM_PATEAR = 5,
-    ITEM_TOTAL = 6
+    ITEM_FLAMA = 6,
+    ITEM_TOTAL = 7
 };
 
 class PowerUp
@@ -503,7 +505,8 @@ public:
             "Fantasma",
             "Velocidad",
             "Vida",
-            "Patear"
+            "Patear",
+            "Flama"
         };
 
         if (tipo < 0 || tipo >= ITEM_TOTAL)
@@ -523,7 +526,8 @@ private:
             "assets/images/item_fantasma.png",
             "assets/images/item_velocidad.png",
             "assets/images/item_vida.png",
-            "assets/images/item_patear.png"
+            "assets/images/item_patear.png",
+            "assets/images/item_flama.png"
         };
 
         for (int i = 0; i < ITEM_TOTAL; i++)
@@ -552,8 +556,8 @@ private:
 };
 
 std::array<sf::Texture, ITEM_TOTAL> PowerUp::texturas;
-std::array<bool, ITEM_TOTAL> PowerUp::texturasCargadas = {false, false, false, false, false, false};
-std::array<bool, ITEM_TOTAL> PowerUp::texturasIntentadas = {false, false, false, false, false, false};
+std::array<bool, ITEM_TOTAL> PowerUp::texturasCargadas = {false, false, false, false, false, false, false};
+std::array<bool, ITEM_TOTAL> PowerUp::texturasIntentadas = {false, false, false, false, false, false, false};
 
 // ============== FIN POWER-UP ==============
 
@@ -852,7 +856,8 @@ public:
           const std::string& rutaTextura = "assets/images/Bomba_Verde.png")
         : fila(fila), columna(columna), activa(true), jugadorEncima(true), solida(false),
           enMovimiento(false), direccionMovimiento(ABAJO), rangoFuego(rangoFuego), propietario(propietario),
-          bodyId(b2_nullBodyId), shapeId(b2_nullShapeId), texturaCargada(false), explosionForzada(false)
+          bodyId(b2_nullBodyId), shapeId(b2_nullShapeId), texturaCargada(false),
+          explosionForzada(false), explotando(false)
     {
         cargarTextura(rutaTextura);
         // Calcular posición en píxeles: centro de la celda
@@ -895,7 +900,8 @@ public:
           rangoFuego(otra.rangoFuego), propietario(otra.propietario),
           bodyId(otra.bodyId), shapeId(otra.shapeId),
           textura(std::move(otra.textura)), sprite(std::move(otra.sprite)),
-          texturaCargada(otra.texturaCargada), explosionForzada(otra.explosionForzada), temporizador(std::move(otra.temporizador))
+          texturaCargada(otra.texturaCargada), explosionForzada(otra.explosionForzada),
+          explotando(otra.explotando), temporizador(std::move(otra.temporizador))
     {
         enlazarSpriteATextura();
         otra.bodyId = b2_nullBodyId;
@@ -924,6 +930,7 @@ public:
             sprite = std::move(otra.sprite);
             texturaCargada = otra.texturaCargada;
             explosionForzada = otra.explosionForzada;
+            explotando = otra.explotando;
             temporizador = std::move(otra.temporizador);
             enlazarSpriteATextura();
 
@@ -987,6 +994,7 @@ public:
         if (activa && (explosionForzada || temporizador.getElapsedTime().asSeconds() >= 3.0f))
         {
             activa = false;
+            explotando = true;
             
             // Destruir cuerpo físico
             if (b2Body_IsValid(bodyId))
@@ -1160,7 +1168,17 @@ public:
     int getPropietario() const { return propietario; }
     b2BodyId getBodyId() const { return bodyId; }
     bool estaEnCelda(int f, int c) const { return fila == f && columna == c; }
-    void forzarExplosion() { explosionForzada = true; }
+    bool estaExplotando() const { return explotando; }
+    void forzarExplosion()
+    {
+        if (!activa || explotando)
+        {
+            return;
+        }
+
+        explosionForzada = true;
+        explotando = true;
+    }
 
 private:
     void cargarTextura(const std::string& rutaTextura)
@@ -1217,10 +1235,37 @@ private:
     sf::Sprite sprite;
     bool texturaCargada;
     bool explosionForzada;
+    bool explotando;
     sf::Clock temporizador;
 };
 
 // ============== FIN BOMBA ==============
+
+bool forzarBombasTocadasPorExplosion(const Explosion& explosion, std::vector<Bomba>& bombas)
+{
+    bool algunaForzada = false;
+    const auto& celdas = explosion.getCeldasAfectadas();
+
+    for (auto& bomba : bombas)
+    {
+        if (!bomba.isActiva() || bomba.estaExplotando())
+        {
+            continue;
+        }
+
+        for (const auto& celda : celdas)
+        {
+            if (bomba.estaEnCelda(celda.x, celda.y))
+            {
+                bomba.forzarExplosion();
+                algunaForzada = true;
+                break;
+            }
+        }
+    }
+
+    return algunaForzada;
+}
 
 // ============== KNIGHT (JUGADOR) - Box2D v3.0 ==============
 class Knight
@@ -1487,6 +1532,10 @@ public:
         {
             puedePatear = true;
         }
+        else if (tipo == ITEM_FLAMA)
+        {
+            rangoFuego++;
+        }
     }
 
     bool morir(PhysicsSpace& physics, bool conservarMejoras = false)
@@ -1587,6 +1636,8 @@ public:
             return velocidadExtraRonda > 0.0f ? 1.0f : tiempoVelocidad;
         if (tipo == ITEM_PATEAR)
             return puedePatear ? 1.0f : 0.0f;
+        if (tipo == ITEM_FLAMA)
+            return rangoFuego > 1 ? 1.0f : 0.0f;
         return 0.0f;
     }
 
@@ -2104,12 +2155,13 @@ void llenarItemsIniciales(Mapa& mapa, std::vector<PowerUp>& items, int& corazone
 void dibujarItemsActivosHUD(sf::RenderWindow& window, const Knight& knight, sf::Font& fuente,
                             const std::string& etiqueta, float x, float y)
 {
-    const int tiposTemporales[5] = {
+    const int tiposTemporales[6] = {
         ITEM_BOMBA_EXTRA,
         ITEM_ESCUDO,
         ITEM_FANTASMA,
         ITEM_VELOCIDAD,
-        ITEM_PATEAR
+        ITEM_PATEAR,
+        ITEM_FLAMA
     };
 
     float offsetX = 0.0f;
@@ -2483,6 +2535,9 @@ int main()
     sf::Texture texturaGanadorVersus;
     sf::Sprite spriteGanadorVersus;
     bool texturaGanadorVersusCargada = false;
+    sf::Texture texturaEmpateVersus;
+    sf::Sprite spriteEmpateVersus;
+    bool texturaEmpateVersusCargada = false;
 
     // SISTEMA DE AUDIO (FASE 1)
     sf::Music musicaFondo;
@@ -2624,6 +2679,7 @@ int main()
         indiceCaidaMuerteSubita = 0;
         corazonesSpawneados = 0;
         texturaGanadorVersusCargada = false;
+        texturaEmpateVersusCargada = false;
         pantallaSeleccion.setModoMultijugador(false);
         estadoActual = MENU_PRINCIPAL;
     };
@@ -2643,6 +2699,21 @@ int main()
 
         estadoActual = VICTORIA_VERSUS;
         std::cout << "PLAYER " << ganador << " GANA" << std::endl;
+    };
+
+    auto cargarEmpateVersus = [&]()
+    {
+        texturaEmpateVersusCargada = texturaEmpateVersus.loadFromFile("assets/images/empate.png");
+        if (texturaEmpateVersusCargada)
+        {
+            spriteEmpateVersus.setTexture(texturaEmpateVersus, true);
+            sf::FloatRect bounds = spriteEmpateVersus.getLocalBounds();
+            spriteEmpateVersus.setOrigin(bounds.left + bounds.width / 2.0f, bounds.top + bounds.height / 2.0f);
+            spriteEmpateVersus.setPosition(480.0f, 416.0f);
+        }
+
+        estadoActual = EMPATE_VERSUS;
+        std::cout << "EMPATE VERSUS" << std::endl;
     };
 
     auto reiniciarRondaVersus = [&]()
@@ -2690,15 +2761,42 @@ int main()
 
     auto resolverDanoVersus = [&](int jugadorPerdedor)
     {
+        bool p1SinVidas = knight.getVidas() <= 0;
+        bool p2SinVidas = knight2.getVidas() <= 0;
+
+        if (p1SinVidas && p2SinVidas)
+        {
+            cargarEmpateVersus();
+            return;
+        }
+
+        if (p1SinVidas)
+        {
+            cargarVictoriaVersus(2);
+            return;
+        }
+
+        if (p2SinVidas)
+        {
+            cargarVictoriaVersus(1);
+            return;
+        }
+
+        if (jugadorPerdedor == 3)
+        {
+            reiniciarRondaVersus();
+            return;
+        }
+
         if (jugadorPerdedor == 1)
         {
-            if (knight.getVidas() <= 0)
+            if (p1SinVidas)
             {
                 cargarVictoriaVersus(2);
                 return;
             }
         }
-        else if (knight2.getVidas() <= 0)
+        else if (p2SinVidas)
         {
             cargarVictoriaVersus(1);
             return;
@@ -2727,11 +2825,11 @@ int main()
 
             if (aplastaP1)
             {
-                knight.setVidas(0);
+                knight.setVidas(knight.getVidas() - 1);
             }
             if (aplastaP2)
             {
-                knight2.setVidas(0);
+                knight2.setVidas(knight2.getVidas() - 1);
             }
 
             for (auto& bomba : listaBombas)
@@ -2760,7 +2858,7 @@ int main()
             if (estadoActual == JUGANDO && (aplastaP1 || aplastaP2))
             {
                 reinicioRondaPendiente = true;
-                perdedorRondaPendiente = aplastaP1 ? 1 : 2;
+                perdedorRondaPendiente = (aplastaP1 && aplastaP2) ? 3 : (aplastaP1 ? 1 : 2);
             }
 
             break;
@@ -2892,7 +2990,8 @@ int main()
                 {
                     knight2.plantarBomba(mapa, listaBombas, physics, 2);
                 }
-                if (event.key.code == sf::Keyboard::Return && estadoActual == VICTORIA_VERSUS)
+                if (event.key.code == sf::Keyboard::Return &&
+                    (estadoActual == VICTORIA_VERSUS || estadoActual == EMPATE_VERSUS))
                 {
                     volverAlMenuPrincipal();
                 }
@@ -2996,6 +3095,13 @@ int main()
             jugadoresBodyId.push_back(knight2.getBodyId());
         }
 
+        bool revisarCadenaBombas = true;
+        int guardiaCadenaBombas = 0;
+        while (revisarCadenaBombas && guardiaCadenaBombas < 128)
+        {
+            revisarCadenaBombas = false;
+            guardiaCadenaBombas++;
+
         for (auto& bomba : listaBombas)
         {
             if (bomba.update(physics, jugadoresBodyId))  // Si retorna true = explotó
@@ -3015,9 +3121,15 @@ int main()
                     &listaItems,
                     obtenerColorExplosionPersonaje(personajeExplosion)
                 );
+                if (forzarBombasTocadasPorExplosion(explosion, listaBombas))
+                {
+                    revisarCadenaBombas = true;
+                }
                 listaExplosiones.push_back(explosion);
             }
             bomba.actualizarMovimientoPateado(mapa);
+        }
+
         }
 
         // Eliminar bombas inactivas usando erase_if (C++20)
@@ -3422,7 +3534,7 @@ int main()
         if (estadoActual == JUGANDO && modoActual == MULTIJUGADOR && (danoVersusP1 || danoVersusP2))
         {
             reinicioRondaPendiente = true;
-            perdedorRondaPendiente = danoVersusP1 ? 1 : 2;
+            perdedorRondaPendiente = (danoVersusP1 && danoVersusP2) ? 3 : (danoVersusP1 ? 1 : 2);
         }
 
         // ACTUALIZAR HUD (FASE 5)
@@ -3547,6 +3659,32 @@ int main()
                     120.0f
                 );
                 window.draw(textoVictoriaVersus);
+                window.draw(textoVolverMenu);
+            }
+        }
+
+        if (estadoActual == EMPATE_VERSUS)
+        {
+            sf::RectangleShape overlay(sf::Vector2f(960.0f, 832.0f));
+            overlay.setFillColor(sf::Color(0, 0, 0, 180));
+            window.draw(overlay);
+
+            if (texturaEmpateVersusCargada)
+            {
+                window.draw(spriteEmpateVersus);
+            }
+
+            if (fuenteCargada)
+            {
+                if (!texturaEmpateVersusCargada)
+                {
+                    textoVictoriaVersus.setString("EMPATE");
+                    textoVictoriaVersus.setPosition(
+                        480.0f - textoVictoriaVersus.getLocalBounds().width / 2.0f,
+                        260.0f
+                    );
+                    window.draw(textoVictoriaVersus);
+                }
                 window.draw(textoVolverMenu);
             }
         }

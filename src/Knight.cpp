@@ -349,6 +349,10 @@ void Knight::recolectarItem(int tipo, bool modoVersus)
     {
         puedePatear = true;
     }
+    else if (tipo == 6)
+    {
+        rangoFuego++;
+    }
 }
 
 bool Knight::morir(PhysicsSpace& physics, bool conservarMejoras)
