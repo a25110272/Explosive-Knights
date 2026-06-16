@@ -46,8 +46,10 @@ const float TAMANO_TILE = 64.0f;
 const float MAP_CELL_SIZE = TAMANO_TILE;
 const float WALL_HITBOX_SIZE = 56.0f;
 const float KNIGHT_HITBOX_SIZE = 40.0f;
-const float KNIGHT_COLLISION_SIZE = TAMANO_TILE * 0.9f;
-const float KNIGHT_COLLISION_RADIUS = KNIGHT_COLLISION_SIZE / 2.0f;
+const float ENTITY_COLLISION_SIZE = TAMANO_TILE * 0.95f;
+const float KNIGHT_COLLISION_SIZE = ENTITY_COLLISION_SIZE;
+const float KNIGHT_COLLISION_RADIUS = TAMANO_TILE * 0.40f;
+const float BOMB_COLLISION_SIZE = ENTITY_COLLISION_SIZE;
 const float KNIGHT_DAMAGE_HITBOX_SIZE = 32.0f;
 const float FIRE_DAMAGE_MARGIN = 4.0f;
 const float ENEMY_HITBOX_SIZE = 36.0f;
@@ -254,8 +256,9 @@ public:
             frameHeight - 2
         ));
         centrarSprite();
-        float escala = MAP_CELL_SIZE / static_cast<float>(frameHeight);
-        sprite.setScale(escala, escala);
+        float scaleX = MAP_CELL_SIZE / static_cast<float>(frameWidth);
+        float scaleY = MAP_CELL_SIZE / static_cast<float>(frameHeight - 2);
+        sprite.setScale(scaleX, scaleY);
     }
 
     void move(float offsetX, float offsetY, Direccion nuevaDireccion)
@@ -389,7 +392,7 @@ private:
 
     void centrarSprite()
     {
-        sprite.setOrigin(frameWidth / 2.0f, frameHeight / 2.0f);
+        sprite.setOrigin(frameWidth / 2.0f, (frameHeight - 2) / 2.0f);
     }
 };
 
@@ -434,8 +437,10 @@ public:
             item.setTexture(*textura);
             sf::Vector2u size = textura->getSize();
             item.setOrigin(size.x / 2.0f, size.y / 2.0f);
-            float escala = 46.0f / static_cast<float>(std::max(size.x, size.y));
-            item.setScale(escala, escala);
+            item.setScale(
+                MAP_CELL_SIZE / static_cast<float>(size.x),
+                MAP_CELL_SIZE / static_cast<float>(size.y)
+            );
             item.setPosition(posX, posY);
             window.draw(item);
             return;
@@ -443,8 +448,9 @@ public:
 
         if (activo)
         {
-            sf::CircleShape item(15.0f);
-            item.setPosition(posX - 15.0f, posY - 15.0f);
+            sf::CircleShape item(MAP_CELL_SIZE / 2.0f);
+            item.setOrigin(MAP_CELL_SIZE / 2.0f, MAP_CELL_SIZE / 2.0f);
+            item.setPosition(posX, posY);
 
             // Color según tipo
             if (tipo == 0)
@@ -743,8 +749,8 @@ public:
             bodyId = b2CreateBody(worldId, &bodyDef);
 
             b2Polygon polygon = b2MakeBox(
-                24.0f / PIXELS_PER_METER,
-                24.0f / PIXELS_PER_METER
+                (BOMB_COLLISION_SIZE / 2.0f) / PIXELS_PER_METER,
+                (BOMB_COLLISION_SIZE / 2.0f) / PIXELS_PER_METER
             );
 
             b2ShapeDef shapeDef = b2DefaultShapeDef();
@@ -900,9 +906,10 @@ public:
                 return;
             }
 
-            sf::CircleShape bomba(24.0f);
+            sf::CircleShape bomba(MAP_CELL_SIZE / 2.0f);
+            bomba.setOrigin(MAP_CELL_SIZE / 2.0f, MAP_CELL_SIZE / 2.0f);
             bomba.setFillColor(sf::Color::Black);
-            bomba.setPosition(posX - 24.0f, posY - 24.0f);  // Centrar
+            bomba.setPosition(posX, posY);
             window.draw(bomba);
         }
     }
@@ -1029,8 +1036,10 @@ private:
         sprite.setTexture(textura, true);
         sf::Vector2u size = textura.getSize();
         sprite.setOrigin(size.x / 2.0f, size.y / 2.0f);
-        float escala = MAP_CELL_SIZE / static_cast<float>(std::max(size.x, size.y));
-        sprite.setScale(escala, escala);
+        sprite.setScale(
+            MAP_CELL_SIZE / static_cast<float>(size.x),
+            MAP_CELL_SIZE / static_cast<float>(size.y)
+        );
     }
 
     b2Vec2 obtenerVelocidadDireccion(Direccion direccion) const
