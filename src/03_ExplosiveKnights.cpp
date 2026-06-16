@@ -707,7 +707,7 @@ public:
     const std::vector<sf::Vector2i>& getCeldasAfectadas() const { return celdasAfectadas; }
 
 private:
-    static constexpr float DURACION_EXPLOSION = 0.5f;
+    static constexpr float DURACION_EXPLOSION = Mapa::DURACION_DESTRUCCION_BLOQUE;
     std::vector<sf::Vector2i> celdasAfectadas;
     sf::Clock temporizador;
     sf::Color colorBase;

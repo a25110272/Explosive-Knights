@@ -18,6 +18,7 @@ public:
     static const int INDESTRUCTIBLE = 1;
     static const int DESTRUCTIBLE = 2;
     static const int DESTRUYENDOSE = 3;
+    static constexpr float DURACION_DESTRUCCION_BLOQUE = 0.5f;
 
     Mapa();
     ~Mapa();

@@ -4,8 +4,6 @@
 #include <ctime>
 #include <iostream>
 
-const float TIEMPO_DESTRUCCION_BLOQUE = 0.55f;
-
 Mapa::Mapa()
     : objetosMapaCargados(false), mapaBaseCargado(false)
 {
@@ -166,7 +164,7 @@ void Mapa::destruirBloque(int fila, int columna, std::vector<PowerUp>* pItems)
     if (grid[fila][columna] == DESTRUCTIBLE)
     {
         grid[fila][columna] = DESTRUYENDOSE;
-        bloquesEnDestruccion.push_back({fila, columna, TIEMPO_DESTRUCCION_BLOQUE, pItems});
+        bloquesEnDestruccion.push_back({fila, columna, DURACION_DESTRUCCION_BLOQUE, pItems});
     }
 }
 
