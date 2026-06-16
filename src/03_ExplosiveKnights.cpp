@@ -51,7 +51,7 @@ const float WALL_HITBOX_SIZE = 56.0f;
 const float KNIGHT_HITBOX_SIZE = 40.0f;
 const float ENTITY_COLLISION_SIZE = TAMANO_TILE * 0.95f;
 const float KNIGHT_COLLISION_SIZE = ENTITY_COLLISION_SIZE;
-const float KNIGHT_COLLISION_RADIUS = TAMANO_TILE * 0.40f;
+const float KNIGHT_COLLISION_RADIUS = TAMANO_TILE * 0.49f;
 const float BOMB_COLLISION_SIZE = ENTITY_COLLISION_SIZE;
 const float KNIGHT_DAMAGE_HITBOX_SIZE = 32.0f;
 const float FIRE_DAMAGE_MARGIN = 4.0f;
@@ -262,8 +262,8 @@ public:
             frameHeight - 2
         ));
         centrarSprite();
-        float scaleX = MAP_CELL_SIZE / static_cast<float>(frameWidth);
-        float scaleY = MAP_CELL_SIZE / static_cast<float>(frameHeight - 2);
+        float scaleY = MAP_CELL_SIZE / static_cast<float>(frameHeight);
+        float scaleX = scaleY;
         sprite.setScale(scaleX, scaleY);
     }
 
@@ -398,7 +398,7 @@ private:
 
     void centrarSprite()
     {
-        sprite.setOrigin(frameWidth / 2.0f, (frameHeight - 2) / 2.0f);
+        sprite.setOrigin(frameWidth / 2.0f, frameHeight / 2.0f);
     }
 };
 

@@ -43,8 +43,8 @@ public:
             frameHeight - 2
         ));
         centrarSprite();
-        float scaleX = MAP_CELL_SIZE / static_cast<float>(frameWidth);
-        float scaleY = MAP_CELL_SIZE / static_cast<float>(frameHeight - 2);
+        float scaleY = MAP_CELL_SIZE / static_cast<float>(frameHeight);
+        float scaleX = scaleY;
         sprite.setScale(scaleX, scaleY);
     }
 
@@ -169,7 +169,7 @@ private:
 
     void centrarSprite()
     {
-        sprite.setOrigin(frameWidth / 2.0f, (frameHeight - 2) / 2.0f);
+        sprite.setOrigin(frameWidth / 2.0f, frameHeight / 2.0f);
     }
 };
 
