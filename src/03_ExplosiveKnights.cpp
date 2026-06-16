@@ -555,8 +555,10 @@ std::array<bool, ITEM_TOTAL> PowerUp::texturasIntentadas = {false, false, false,
 class Explosion
 {
 public:
-    Explosion(int centroFila, int centroCol, Mapa& mapa, int rango = 2, std::vector<PowerUp>* pItems = nullptr)
-        : activa(true), pListaItems(pItems)
+    Explosion(int centroFila, int centroCol, Mapa& mapa, int rango = 2,
+              std::vector<PowerUp>* pItems = nullptr,
+              sf::Color colorBase = sf::Color(255, 165, 0, 200))
+        : colorBase(colorBase), activa(true), pListaItems(pItems)
     {
         // Añadir el centro
         celdasAfectadas.push_back({centroFila, centroCol});
@@ -671,7 +673,7 @@ public:
 
     void update()
     {
-        if (activa && temporizador.getElapsedTime().asSeconds() >= 0.5f)
+        if (activa && temporizador.getElapsedTime().asSeconds() >= DURACION_EXPLOSION)
         {
             activa = false;
         }
@@ -681,10 +683,19 @@ public:
     {
         if (activa)
         {
+            float progreso = temporizador.getElapsedTime().asSeconds() / DURACION_EXPLOSION;
+            if (progreso > 1.0f)
+            {
+                progreso = 1.0f;
+            }
+
+            sf::Color colorActual = colorBase;
+            colorActual.a = static_cast<sf::Uint8>(std::max(0.0f, static_cast<float>(colorBase.a) * (1.0f - progreso)));
+
             for (const auto& celda : celdasAfectadas)
             {
                 sf::RectangleShape fuego(sf::Vector2f(64.0f, 64.0f));
-                fuego.setFillColor(sf::Color(255, 165, 0));  // Naranja
+                fuego.setFillColor(colorActual);
                 fuego.setPosition(celda.y * 64.0f, celda.x * 64.0f);
                 window.draw(fuego);
             }
@@ -696,8 +707,10 @@ public:
     const std::vector<sf::Vector2i>& getCeldasAfectadas() const { return celdasAfectadas; }
 
 private:
+    static constexpr float DURACION_EXPLOSION = 0.5f;
     std::vector<sf::Vector2i> celdasAfectadas;
     sf::Clock temporizador;
+    sf::Color colorBase;
     bool activa;
     std::vector<PowerUp>* pListaItems;
 };
@@ -2130,6 +2143,22 @@ std::string obtenerRutaBombaPersonaje(int personaje)
     return rutas[personaje];
 }
 
+sf::Color obtenerColorExplosionPersonaje(int personaje)
+{
+    switch (personaje)
+    {
+    case 1:
+        return sf::Color(255, 50, 50, 200);
+    case 2:
+        return sf::Color(50, 150, 255, 200);
+    case 3:
+        return sf::Color(100, 0, 255, 200);
+    case 0:
+    default:
+        return sf::Color(50, 255, 50, 200);
+    }
+}
+
 sf::Vector2f obtenerCentroBody(b2BodyId bodyId)
 {
     if (!b2Body_IsValid(bodyId))
@@ -2228,6 +2257,8 @@ int main()
     int personajeSeleccionadoP2 = 2;
     int ganadorVersus = 0;
     int personajeGanadorVersus = 0;
+    bool reinicioRondaPendiente = false;
+    int perdedorRondaPendiente = 0;
     sf::Texture texturaGanadorVersus;
     sf::Sprite spriteGanadorVersus;
     bool texturaGanadorVersusCargada = false;
@@ -2353,6 +2384,8 @@ int main()
         nivelActual = 1;
         ganadorVersus = 0;
         personajeGanadorVersus = 0;
+        reinicioRondaPendiente = false;
+        perdedorRondaPendiente = 0;
         corazonesSpawneados = 0;
         texturaGanadorVersusCargada = false;
         pantallaSeleccion.setModoMultijugador(false);
@@ -2409,6 +2442,8 @@ int main()
         sf::Vector2f spawnP2 = obtenerSpawnVersus(personajeSeleccionadoP2);
         knight.reiniciarRonda(spawnP1.x, spawnP1.y);
         knight2.reiniciarRonda(spawnP2.x, spawnP2.y);
+        reinicioRondaPendiente = false;
+        perdedorRondaPendiente = 0;
         estadoActual = JUGANDO;
         std::cout << "RONDA VERSUS REINICIADA" << std::endl;
     };
@@ -2662,7 +2697,20 @@ int main()
             if (bomba.update(physics, jugadoresBodyId))  // Si retorna true = explotó
             {
                 // Crear explosión con el rango del jugador que puso la bomba
-                Explosion explosion(bomba.getFila(), bomba.getColumna(), mapa, bomba.getRangoFuego(), &listaItems);
+                int personajeExplosion = personajeSeleccionadoP1;
+                if (bomba.getPropietario() == 2)
+                {
+                    personajeExplosion = personajeSeleccionadoP2;
+                }
+
+                Explosion explosion(
+                    bomba.getFila(),
+                    bomba.getColumna(),
+                    mapa,
+                    bomba.getRangoFuego(),
+                    &listaItems,
+                    obtenerColorExplosionPersonaje(personajeExplosion)
+                );
                 listaExplosiones.push_back(explosion);
             }
             bomba.actualizarMovimientoPateado(mapa);
@@ -2718,6 +2766,14 @@ int main()
             {
                 ++it_exp;
             }
+        }
+
+        if (estadoActual == JUGANDO &&
+            modoActual == MULTIJUGADOR &&
+            reinicioRondaPendiente &&
+            listaExplosiones.empty())
+        {
+            resolverDanoVersus(perdedorRondaPendiente);
         }
 
         // UPDATE ENEMIGOS (FASE 4)
@@ -3038,22 +3094,8 @@ int main()
 
         if (estadoActual == JUGANDO && modoActual == MULTIJUGADOR && (danoVersusP1 || danoVersusP2))
         {
-            if (knight.getVidas() <= 0 && knight2.getVidas() <= 0)
-            {
-                cargarVictoriaVersus(danoVersusP1 ? 2 : 1);
-            }
-            else if (knight.getVidas() <= 0)
-            {
-                cargarVictoriaVersus(2);
-            }
-            else if (knight2.getVidas() <= 0)
-            {
-                cargarVictoriaVersus(1);
-            }
-            else
-            {
-                reiniciarRondaVersus();
-            }
+            reinicioRondaPendiente = true;
+            perdedorRondaPendiente = danoVersusP1 ? 1 : 2;
         }
 
         // ACTUALIZAR HUD (FASE 5)
