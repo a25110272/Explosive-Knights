@@ -71,6 +71,7 @@ const uint32_t COLLISION_INDESTRUCTIBLE = 0x0008;
 const uint32_t COLLISION_DESTRUCTIBLE = 0x0010;
 const uint32_t COLLISION_ENEMY = 0x0020;
 const uint32_t COLLISION_ALL = 0xFFFFFFFF;
+const int PROPIETARIO_JEFE = 99;
 const int MAX_ITEMS_ACTIVOS = 3;
 const int PROBABILIDAD_ITEM_DESTRUCTIBLE = 70;
 const int MAX_CORAZONES_POR_MAPA = 1;
@@ -584,9 +585,10 @@ class Explosion
 public:
     Explosion(int centroFila, int centroCol, Mapa& mapa, int rango = 2,
               std::vector<PowerUp>* pItems = nullptr,
-              sf::Color colorBase = sf::Color(255, 165, 0, 200))
+              sf::Color colorBase = sf::Color(255, 165, 0, 200),
+              int propietario = 0)
         : centroFila(centroFila), centroCol(centroCol), colorBase(colorBase),
-          activa(true), pListaItems(pItems)
+          activa(true), pListaItems(pItems), propietario(propietario)
     {
         // Añadir el centro
         celdasAfectadas.push_back({centroFila, centroCol});
@@ -729,6 +731,7 @@ public:
     bool isActiva() const { return activa; }
 
     const std::vector<sf::Vector2i>& getCeldasAfectadas() const { return celdasAfectadas; }
+    int getPropietario() const { return propietario; }
 
 private:
     static constexpr float DURACION_EXPLOSION = Mapa::DURACION_DESTRUCCION_BLOQUE;
@@ -857,6 +860,7 @@ private:
     sf::Color colorBase;
     bool activa;
     std::vector<PowerUp>* pListaItems;
+    int propietario;
 };
 
 // ============== FIN EXPLOSIÓN ==============
@@ -2356,7 +2360,8 @@ public:
         return *this;
     }
 
-    void update(Mapa& mapa, PhysicsSpace& physics, float dt)
+    void update(Mapa& mapa, PhysicsSpace& physics, float dt,
+                int nivelActual, Knight& jugador1, Knight& jugador2, bool usarJugador2)
     {
         (void)physics;
         if (!vivo || !b2Body_IsValid(bodyId))
@@ -2370,9 +2375,14 @@ public:
         int filaActual = static_cast<int>(pixelY / 64.0f);
         int colActual = static_cast<int>(pixelX / 64.0f);
 
-        if (!siguienteCeldaLibre(mapa, filaActual, colActual))
+        std::vector<Direccion> direccionesLibres = obtenerDireccionesLibres(mapa, filaActual, colActual);
+        bool enCentro = estaCentradoEnCelda(pixelX, pixelY);
+        bool debeElegir = !siguienteCeldaLibre(mapa, filaActual, colActual) ||
+                          (enCentro && direccionesLibres.size() >= 3);
+
+        if (debeElegir)
         {
-            elegirDireccionValidaDesdeCelda(mapa, filaActual, colActual);
+            elegirDireccionProgresiva(direccionesLibres, nivelActual, jugador1, jugador2, usarJugador2, pixelX, pixelY);
         }
 
         b2Body_SetLinearVelocity(bodyId, obtenerVelocidadDireccion());
@@ -2381,7 +2391,7 @@ public:
         float speedActual = std::sqrt(velActual.x * velActual.x + velActual.y * velActual.y);
         if (speedActual < 0.5f)
         {
-            elegirDireccionValidaDesdeCelda(mapa, filaActual, colActual);
+            elegirDireccionProgresiva(direccionesLibres, nivelActual, jugador1, jugador2, usarJugador2, pixelX, pixelY);
             b2Body_SetLinearVelocity(bodyId, obtenerVelocidadDireccion());
             velActual = b2Body_GetLinearVelocity(bodyId);
             speedActual = std::sqrt(velActual.x * velActual.x + velActual.y * velActual.y);
@@ -2512,7 +2522,7 @@ private:
         return celdaLibre(mapa, siguienteFila, siguienteColumna);
     }
 
-    void elegirDireccionValidaDesdeCelda(Mapa& mapa, int fila, int columna)
+    std::vector<Direccion> obtenerDireccionesLibres(Mapa& mapa, int fila, int columna) const
     {
         std::vector<Direccion> direccionesLibres;
 
@@ -2525,10 +2535,136 @@ private:
         if (celdaLibre(mapa, fila, columna - 1))
             direccionesLibres.push_back(IZQUIERDA);
 
+        return direccionesLibres;
+    }
+
+    void elegirDireccionValidaDesdeCelda(Mapa& mapa, int fila, int columna)
+    {
+        std::vector<Direccion> direccionesLibres = obtenerDireccionesLibres(mapa, fila, columna);
         if (!direccionesLibres.empty())
         {
             dirActual = direccionesLibres[rand() % direccionesLibres.size()];
         }
+    }
+
+    bool estaCentradoEnCelda(float pixelX, float pixelY) const
+    {
+        float centroX = std::floor(pixelX / TAMANO_TILE) * TAMANO_TILE + TAMANO_TILE / 2.0f;
+        float centroY = std::floor(pixelY / TAMANO_TILE) * TAMANO_TILE + TAMANO_TILE / 2.0f;
+        return std::abs(pixelX - centroX) < 5.0f && std::abs(pixelY - centroY) < 5.0f;
+    }
+
+    Direccion direccionOpuesta(Direccion direccion) const
+    {
+        if (direccion == ARRIBA)
+            return ABAJO;
+        if (direccion == ABAJO)
+            return ARRIBA;
+        if (direccion == DERECHA)
+            return IZQUIERDA;
+        return DERECHA;
+    }
+
+    void elegirDireccionProgresiva(const std::vector<Direccion>& libres, int nivelActual,
+                                   Knight& jugador1, Knight& jugador2, bool usarJugador2,
+                                   float pixelX, float pixelY)
+    {
+        if (libres.empty())
+        {
+            return;
+        }
+
+        std::vector<Direccion> candidatas;
+        Direccion reversa = direccionOpuesta(dirActual);
+        for (Direccion direccion : libres)
+        {
+            if (direccion != reversa)
+            {
+                candidatas.push_back(direccion);
+            }
+        }
+
+        if (candidatas.empty())
+        {
+            candidatas = libres;
+        }
+
+        if (nivelActual >= 3 && (rand() % 100) < 65)
+        {
+            dirActual = elegirDireccionHaciaJugador(candidatas, jugador1, jugador2, usarJugador2, pixelX, pixelY);
+            return;
+        }
+
+        dirActual = candidatas[rand() % candidatas.size()];
+    }
+
+    Direccion elegirDireccionHaciaJugador(const std::vector<Direccion>& candidatas,
+                                          Knight& jugador1, Knight& jugador2, bool usarJugador2,
+                                          float pixelX, float pixelY)
+    {
+        sf::Vector2f objetivo = obtenerJugadorMasCercano(jugador1, jugador2, usarJugador2, pixelX, pixelY);
+        Direccion mejor = candidatas.front();
+        float mejorDistancia = 999999999.0f;
+
+        for (Direccion direccion : candidatas)
+        {
+            sf::Vector2f destino = predecirDestino(pixelX, pixelY, direccion);
+            float dx = destino.x - objetivo.x;
+            float dy = destino.y - objetivo.y;
+            float distancia = dx * dx + dy * dy;
+            if (distancia < mejorDistancia)
+            {
+                mejorDistancia = distancia;
+                mejor = direccion;
+            }
+        }
+
+        return mejor;
+    }
+
+    sf::Vector2f obtenerJugadorMasCercano(Knight& jugador1, Knight& jugador2, bool usarJugador2,
+                                          float pixelX, float pixelY)
+    {
+        sf::Vector2f mejor(pixelX, pixelY);
+        float mejorDistancia = 999999999.0f;
+
+        auto evaluar = [&](Knight& jugador)
+        {
+            if (!jugador.estaActivo() || !b2Body_IsValid(jugador.getBodyId()))
+            {
+                return;
+            }
+
+            b2Vec2 posJugador = b2Body_GetPosition(jugador.getBodyId());
+            sf::Vector2f candidato(posJugador.x * PIXELS_PER_METER, posJugador.y * PIXELS_PER_METER);
+            float dx = candidato.x - pixelX;
+            float dy = candidato.y - pixelY;
+            float distancia = dx * dx + dy * dy;
+            if (distancia < mejorDistancia)
+            {
+                mejorDistancia = distancia;
+                mejor = candidato;
+            }
+        };
+
+        evaluar(jugador1);
+        if (usarJugador2)
+        {
+            evaluar(jugador2);
+        }
+
+        return mejor;
+    }
+
+    sf::Vector2f predecirDestino(float pixelX, float pixelY, Direccion direccion) const
+    {
+        if (direccion == ARRIBA)
+            return sf::Vector2f(pixelX, pixelY - TAMANO_TILE);
+        if (direccion == ABAJO)
+            return sf::Vector2f(pixelX, pixelY + TAMANO_TILE);
+        if (direccion == DERECHA)
+            return sf::Vector2f(pixelX + TAMANO_TILE, pixelY);
+        return sf::Vector2f(pixelX - TAMANO_TILE, pixelY);
     }
 
     b2BodyId bodyId;
@@ -2736,8 +2872,8 @@ public:
           hp(10),
           invulnerabilidad(0.0f),
           dirActual(ABAJO),
-          speed(6.5f * 0.8f),
-          tiempoBomba(3.0f),
+          speed(6.5f * 1.25f),
+          tiempoBomba(3.5f),
           texturaCargada(false),
           frameWidth(0),
           frameHeight(0),
@@ -2836,7 +2972,6 @@ public:
     void update(Mapa& mapa, PhysicsSpace& physics, Knight& jugador1, Knight& jugador2,
                 bool usarJugador2, std::vector<Bomba>& bombas, float dt)
     {
-        (void)mapa;
         if (!b2Body_IsValid(bodyId) || hp <= 0)
         {
             return;
@@ -2857,7 +2992,22 @@ public:
 
         Knight* objetivo = elegirObjetivo(jugador1, jugador2, usarJugador2, bossX, bossY);
         bool moviendose = false;
-        if (objetivo != nullptr && b2Body_IsValid(objetivo->getBodyId()))
+        Bomba* bombaPeligrosa = obtenerBombaPeligrosa(bombas, bossX, bossY);
+
+        if (bombaPeligrosa != nullptr && b2Body_IsValid(bombaPeligrosa->getBodyId()))
+        {
+            b2Vec2 posBomba = b2Body_GetPosition(bombaPeligrosa->getBodyId());
+            dirActual = obtenerDireccionEvasion(
+                bossX,
+                bossY,
+                posBomba.x * PIXELS_PER_METER,
+                posBomba.y * PIXELS_PER_METER,
+                mapa
+            );
+            b2Body_SetLinearVelocity(bodyId, obtenerVelocidadDireccion());
+            moviendose = true;
+        }
+        else if (objetivo != nullptr && b2Body_IsValid(objetivo->getBodyId()))
         {
             b2Vec2 posObjetivo = b2Body_GetPosition(objetivo->getBodyId());
             float objetivoX = posObjetivo.x * PIXELS_PER_METER;
@@ -2865,29 +3015,24 @@ public:
             float dx = objetivoX - bossX;
             float dy = objetivoY - bossY;
 
-            if (std::abs(dx) > std::abs(dy))
-            {
-                dirActual = dx >= 0.0f ? DERECHA : IZQUIERDA;
-            }
-            else
-            {
-                dirActual = dy >= 0.0f ? ABAJO : ARRIBA;
-            }
+            dirActual = obtenerDireccionHaciaObjetivo(dx, dy, mapa, bossX, bossY);
 
             b2Body_SetLinearVelocity(bodyId, obtenerVelocidadDireccion());
             moviendose = true;
+
+            tiempoBomba -= dt;
+            if (tiempoBomba <= 0.0f)
+            {
+                tiempoBomba = 3.5f;
+                plantarBombaJefe(physics, bombas);
+            }
         }
         else
         {
             b2Body_SetLinearVelocity(bodyId, {0.0f, 0.0f});
         }
 
-        tiempoBomba -= dt;
-        if (tiempoBomba <= 0.0f)
-        {
-            tiempoBomba = 3.0f;
-            plantarBombaJefe(physics, bombas);
-        }
+        intentarPatearBombas(bombas);
 
         actualizarAnimacion(dt, moviendose);
     }
@@ -2984,6 +3129,140 @@ private:
         return mejor;
     }
 
+    Bomba* obtenerBombaPeligrosa(std::vector<Bomba>& bombas, float bossX, float bossY)
+    {
+        Bomba* masCercana = nullptr;
+        float mejorDistancia = (TAMANO_TILE * 3.0f) * (TAMANO_TILE * 3.0f);
+
+        for (auto& bomba : bombas)
+        {
+            if (!bomba.isActiva() || !b2Body_IsValid(bomba.getBodyId()))
+            {
+                continue;
+            }
+
+            b2Vec2 posBomba = b2Body_GetPosition(bomba.getBodyId());
+            float dx = posBomba.x * PIXELS_PER_METER - bossX;
+            float dy = posBomba.y * PIXELS_PER_METER - bossY;
+            float distancia = dx * dx + dy * dy;
+            if (distancia < mejorDistancia)
+            {
+                mejorDistancia = distancia;
+                masCercana = &bomba;
+            }
+        }
+
+        return masCercana;
+    }
+
+    Direccion obtenerDireccionEvasion(float bossX, float bossY, float bombaX, float bombaY, Mapa& mapa)
+    {
+        float dx = bossX - bombaX;
+        float dy = bossY - bombaY;
+        Direccion preferida = std::abs(dx) > std::abs(dy)
+            ? (dx >= 0.0f ? DERECHA : IZQUIERDA)
+            : (dy >= 0.0f ? ABAJO : ARRIBA);
+
+        if (direccionLibre(mapa, bossX, bossY, preferida))
+        {
+            return preferida;
+        }
+
+        const Direccion alternativas[4] = {ARRIBA, ABAJO, DERECHA, IZQUIERDA};
+        for (Direccion direccion : alternativas)
+        {
+            if (direccionLibre(mapa, bossX, bossY, direccion))
+            {
+                return direccion;
+            }
+        }
+
+        return preferida;
+    }
+
+    Direccion obtenerDireccionHaciaObjetivo(float dx, float dy, Mapa& mapa, float bossX, float bossY)
+    {
+        Direccion primaria = std::abs(dx) > std::abs(dy)
+            ? (dx >= 0.0f ? DERECHA : IZQUIERDA)
+            : (dy >= 0.0f ? ABAJO : ARRIBA);
+
+        if (direccionLibre(mapa, bossX, bossY, primaria))
+        {
+            return primaria;
+        }
+
+        Direccion secundaria = std::abs(dx) > std::abs(dy)
+            ? (dy >= 0.0f ? ABAJO : ARRIBA)
+            : (dx >= 0.0f ? DERECHA : IZQUIERDA);
+
+        if (direccionLibre(mapa, bossX, bossY, secundaria))
+        {
+            return secundaria;
+        }
+
+        return primaria;
+    }
+
+    bool direccionLibre(Mapa& mapa, float pixelX, float pixelY, Direccion direccion)
+    {
+        int fila = static_cast<int>(pixelY / TAMANO_TILE);
+        int columna = static_cast<int>(pixelX / TAMANO_TILE);
+
+        if (direccion == ARRIBA)
+            fila--;
+        else if (direccion == ABAJO)
+            fila++;
+        else if (direccion == DERECHA)
+            columna++;
+        else if (direccion == IZQUIERDA)
+            columna--;
+
+        return mapa.obtenerTipoCelda(fila, columna) == Mapa::VACIO;
+    }
+
+    void intentarPatearBombas(std::vector<Bomba>& bombas)
+    {
+        if (!b2Body_IsValid(bodyId))
+        {
+            return;
+        }
+
+        b2Vec2 pos = b2Body_GetPosition(bodyId);
+        sf::Vector2f posBoss(pos.x * PIXELS_PER_METER, pos.y * PIXELS_PER_METER);
+
+        for (auto& bomba : bombas)
+        {
+            if (!bomba.isActiva() || !bomba.estaSolida() || bomba.estaEnMovimiento() || !b2Body_IsValid(bomba.getBodyId()))
+            {
+                continue;
+            }
+
+            b2Vec2 posBomba = b2Body_GetPosition(bomba.getBodyId());
+            sf::Vector2f centroBomba(posBomba.x * PIXELS_PER_METER, posBomba.y * PIXELS_PER_METER);
+            if (bombaEstaAlFrenteDelJefe(posBoss, centroBomba))
+            {
+                bomba.patear(dirActual);
+                break;
+            }
+        }
+    }
+
+    bool bombaEstaAlFrenteDelJefe(const sf::Vector2f& boss, const sf::Vector2f& bomba) const
+    {
+        float dx = bomba.x - boss.x;
+        float dy = bomba.y - boss.y;
+        const float rangoFrontal = 80.0f;
+        const float toleranciaLateral = 42.0f;
+
+        if (dirActual == ARRIBA)
+            return dy < 0.0f && std::abs(dy) < rangoFrontal && std::abs(dx) < toleranciaLateral;
+        if (dirActual == ABAJO)
+            return dy > 0.0f && std::abs(dy) < rangoFrontal && std::abs(dx) < toleranciaLateral;
+        if (dirActual == DERECHA)
+            return dx > 0.0f && std::abs(dx) < rangoFrontal && std::abs(dy) < toleranciaLateral;
+        return dx < 0.0f && std::abs(dx) < rangoFrontal && std::abs(dy) < toleranciaLateral;
+    }
+
     void plantarBombaJefe(PhysicsSpace& physics, std::vector<Bomba>& bombas)
     {
         if (!b2Body_IsValid(bodyId))
@@ -3008,7 +3287,7 @@ private:
             }
         }
 
-        bombas.emplace_back(fila, columna, physics, 2, 99, "assets/images/Bomba_Jefe.png");
+        bombas.emplace_back(fila, columna, physics, 2, PROPIETARIO_JEFE, "assets/images/Bomba_Jefe.png");
     }
 
     int obtenerFilaDireccion() const
@@ -3856,6 +4135,20 @@ sf::Vector2i obtenerCeldaBody(b2BodyId bodyId)
         static_cast<int>(centro.y / MAP_CELL_SIZE),
         static_cast<int>(centro.x / MAP_CELL_SIZE)
     );
+}
+
+bool cuerposSeTocan(b2BodyId a, b2BodyId b, float distanciaMaxima)
+{
+    if (!b2Body_IsValid(a) || !b2Body_IsValid(b))
+    {
+        return false;
+    }
+
+    b2Vec2 pa = b2Body_GetPosition(a);
+    b2Vec2 pb = b2Body_GetPosition(b);
+    float dx = (pa.x - pb.x) * PIXELS_PER_METER;
+    float dy = (pa.y - pb.y) * PIXELS_PER_METER;
+    return dx * dx + dy * dy <= distanciaMaxima * distanciaMaxima;
 }
 
 int main()
@@ -4862,7 +5155,8 @@ int main()
                     mapa,
                     bomba.getRangoFuego(),
                     &listaItems,
-                    obtenerColorExplosionPersonaje(personajeExplosion)
+                    obtenerColorExplosionPersonaje(personajeExplosion),
+                    bomba.getPropietario()
                 );
                 if (forzarBombasTocadasPorExplosion(explosion, listaBombas))
                 {
@@ -4964,7 +5258,15 @@ int main()
         {
             if (enemigo.isVivo())
             {
-                enemigo.update(mapa, physics, timeStep);
+                enemigo.update(
+                    mapa,
+                    physics,
+                    timeStep,
+                    gestorArcade.getNivelActual(),
+                    knight,
+                    knight2,
+                    segundoJugadorActivo()
+                );
             }
         }
 
@@ -5002,6 +5304,10 @@ int main()
                 {
                     if (celda.x == filaBoss && celda.y == colBoss)
                     {
+                        if (explosion.getPropietario() == PROPIETARIO_JEFE)
+                        {
+                            continue;
+                        }
                         boss.recibirDano();
                         break;
                     }
@@ -5030,17 +5336,7 @@ int main()
         // Ataque de Boss al jugador (FASE 6)
         for (auto& boss : listaJefes)
         {
-            b2Vec2 posBoss = b2Body_GetPosition(boss.getBodyId());
-            float pixelXBoss = posBoss.x * PIXELS_PER_METER;
-            float pixelYBoss = posBoss.y * PIXELS_PER_METER;
-
-            b2Vec2 posKnightBoss = b2Body_GetPosition(knight.getBodyId());
-            float pixelXKnight = posKnightBoss.x * PIXELS_PER_METER;
-            float pixelYKnight = posKnightBoss.y * PIXELS_PER_METER;
-            float distancia = std::sqrt((pixelXKnight - pixelXBoss) * (pixelXKnight - pixelXBoss) +
-                                        (pixelYKnight - pixelYBoss) * (pixelYKnight - pixelYBoss));
-
-            if (distancia < 64.0f)
+            if (cuerposSeTocan(boss.getBodyId(), knight.getBodyId(), 58.0f))
             {
                 if (estadoActual == JUGANDO_ARCADE)
                 {
@@ -5054,13 +5350,7 @@ int main()
 
             if (segundoJugadorActivo())
             {
-                b2Vec2 posKnight2Boss = b2Body_GetPosition(knight2.getBodyId());
-                float pixelXKnight2 = posKnight2Boss.x * PIXELS_PER_METER;
-                float pixelYKnight2 = posKnight2Boss.y * PIXELS_PER_METER;
-                float distanciaP2 = std::sqrt((pixelXKnight2 - pixelXBoss) * (pixelXKnight2 - pixelXBoss) +
-                                              (pixelYKnight2 - pixelYBoss) * (pixelYKnight2 - pixelYBoss));
-
-                if (distanciaP2 < 64.0f)
+                if (cuerposSeTocan(boss.getBodyId(), knight2.getBodyId(), 58.0f))
                 {
                     if (estadoActual == JUGANDO_ARCADE)
                     {
@@ -5338,13 +5628,7 @@ int main()
         {
             if (enemigo.isVivo())
             {
-                b2Vec2 posEnemigo = b2Body_GetPosition(enemigo.getBodyId());
-                float pixelXEnemigo = posEnemigo.x * PIXELS_PER_METER;
-                float pixelYEnemigo = posEnemigo.y * PIXELS_PER_METER;
-                int filaEnemigo = static_cast<int>(pixelYEnemigo / 64.0f);
-                int colEnemigo = static_cast<int>(pixelXEnemigo / 64.0f);
-
-                if (filaEnemigo == filaKnight && colEnemigo == colKnight)
+                if (cuerposSeTocan(enemigo.getBodyId(), knight.getBodyId(), 46.0f))
                 {
                     if (estadoActual == JUGANDO_ARCADE)
                     {
@@ -5356,7 +5640,7 @@ int main()
                     }
                 }
 
-                if (segundoJugadorActivo() && filaEnemigo == filaKnight2 && colEnemigo == colKnight2)
+                if (segundoJugadorActivo() && cuerposSeTocan(enemigo.getBodyId(), knight2.getBodyId(), 46.0f))
                 {
                     if (estadoActual == JUGANDO_ARCADE)
                     {
