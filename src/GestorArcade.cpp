@@ -6,6 +6,10 @@
 #include <cstdlib>
 #include <iostream>
 
+void llenarItemsInicialesArcade(Mapa& mapa, std::vector<PowerUp>& items,
+                                int nivelActual, int jugadoresVivos,
+                                bool& vidaSpawneadaNivel);
+
 GestorArcade::GestorArcade()
     : nivelActual(1),
       cantidadJugadores(1),
@@ -13,7 +17,8 @@ GestorArcade::GestorArcade()
       bossPendiente(false),
       bossActivo(false),
       solicitudAvance(false),
-      victoriaArcade(false)
+      victoriaArcade(false),
+      vidaSpawneadaNivel(false)
 {
 }
 
@@ -26,6 +31,7 @@ void GestorArcade::iniciar(int jugadores)
     bossActivo = false;
     solicitudAvance = false;
     victoriaArcade = false;
+    vidaSpawneadaNivel = false;
 }
 
 void GestorArcade::cargarNivelActual(Mapa& mapa, PhysicsSpace& physics, Knight& jugador1, Knight& jugador2,
@@ -102,7 +108,19 @@ void GestorArcade::cargarNivelActual(Mapa& mapa, PhysicsSpace& physics, Knight& 
         puerta.ocultar();
     }
 
-    llenarItemsIniciales(mapa, items, corazonesSpawneados);
+    int jugadoresVivos = 0;
+    if (vidasP1 > 0)
+    {
+        jugadoresVivos++;
+    }
+    if (cantidadJugadores == 2 && vidasP2 > 0)
+    {
+        jugadoresVivos++;
+    }
+
+    vidaSpawneadaNivel = false;
+    corazonesSpawneados = 0;
+    llenarItemsInicialesArcade(mapa, items, nivelActual, jugadoresVivos, vidaSpawneadaNivel);
     spawnearEnemigosNivel(mapa, physics, enemigos);
 
     puertaAbierta = false;

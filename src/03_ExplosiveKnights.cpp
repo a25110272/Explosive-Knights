@@ -1317,7 +1317,7 @@ public:
           timerFlama(0.0f), timerVelocidad(0.0f), timerEscudo(0.0f),
           timerFantasma(0.0f), timerBota(0.0f),
           bombasExtraRonda(0), velocidadExtraRonda(0.0f),
-          fantasmaActivo(false), puedePatear(false), patearPermanente(false),
+          escudoPermanente(false), fantasmaActivo(false), puedePatear(false), patearPermanente(false),
           ignorandoDestructibles(false), saliendoDeBloque(false), activo(true),
           idJugador(idJugador), rutaTexturaBomba("assets/images/Bomba_Verde.png")
     {
@@ -1585,6 +1585,11 @@ public:
             {
                 timerEscudo = DURACION_ITEM_VERSUS;
             }
+            else if (modoArcade)
+            {
+                escudoPermanente = true;
+                tiempoEscudo = 0.0f;
+            }
             else
             {
                 tiempoEscudo = DURACION_ESCUDO_ITEM;
@@ -1740,6 +1745,11 @@ public:
             return false;
         }
 
+        if (escudoPermanente)
+        {
+            return false;
+        }
+
         if (tiempoInvulnerable > 0.0f)
         {
             return false;
@@ -1871,6 +1881,10 @@ public:
             items.push_back(ITEM_VELOCIDAD);
         }
 
+        if (escudoPermanente || tiempoEscudo > 0.0f)
+        {
+            items.push_back(ITEM_ESCUDO);
+        }
         if (fantasmaActivo || tiempoFantasma > 0.0f)
         {
             items.push_back(ITEM_FANTASMA);
@@ -1927,6 +1941,7 @@ private:
         timerBota = 0.0f;
         bombasExtraRonda = 0;
         velocidadExtraRonda = 0.0f;
+        escudoPermanente = false;
         fantasmaActivo = false;
         puedePatear = false;
         patearPermanente = false;
@@ -2016,6 +2031,7 @@ private:
     float timerBota;
     int bombasExtraRonda;
     float velocidadExtraRonda;
+    bool escudoPermanente;
     bool fantasmaActivo;
     bool puedePatear;
     bool patearPermanente;
@@ -3092,6 +3108,86 @@ void llenarItemsIniciales(Mapa& mapa, std::vector<PowerUp>& items, int& corazone
                 (rand() % 100) < PROBABILIDAD_ITEM_DESTRUCTIBLE)
             {
                 items.emplace_back(fila, columna, seleccionarTipoItemBalanceado(corazonesSpawneados), false);
+            }
+        }
+    }
+}
+
+int seleccionarTipoItemArcade(int nivelActual, bool& vidaSpawneadaNivel)
+{
+    if ((nivelActual == 2 || nivelActual == 4) && !vidaSpawneadaNivel)
+    {
+        int probabilidadVida = nivelActual == 2 ? 12 : 10;
+        if ((rand() % 100) < probabilidadVida)
+        {
+            vidaSpawneadaNivel = true;
+            return ITEM_VIDA;
+        }
+    }
+
+    if (nivelActual <= 1)
+    {
+        const int itemsNivel1[] = {
+            ITEM_BOMBA_EXTRA,
+            ITEM_FLAMA,
+            ITEM_VELOCIDAD
+        };
+        return itemsNivel1[rand() % 3];
+    }
+
+    if (nivelActual == 2)
+    {
+        const int itemsNivel2[] = {
+            ITEM_BOMBA_EXTRA,
+            ITEM_FLAMA,
+            ITEM_VELOCIDAD,
+            ITEM_ESCUDO,
+            ITEM_PATEAR
+        };
+        return itemsNivel2[rand() % 5];
+    }
+
+    if (nivelActual == 3)
+    {
+        const int itemsNivel3[] = {
+            ITEM_BOMBA_EXTRA,
+            ITEM_FLAMA,
+            ITEM_VELOCIDAD,
+            ITEM_ESCUDO,
+            ITEM_PATEAR,
+            ITEM_FANTASMA
+        };
+        return itemsNivel3[rand() % 6];
+    }
+
+    const int itemsNivel4[] = {
+        ITEM_BOMBA_EXTRA,
+        ITEM_FLAMA,
+        ITEM_VELOCIDAD,
+        ITEM_ESCUDO,
+        ITEM_FANTASMA,
+        ITEM_PATEAR
+    };
+    return itemsNivel4[rand() % 6];
+}
+
+void llenarItemsInicialesArcade(Mapa& mapa, std::vector<PowerUp>& items,
+                                int nivelActual, int jugadoresVivos,
+                                bool& vidaSpawneadaNivel)
+{
+    vidaSpawneadaNivel = false;
+    int dropRate = jugadoresVivos >= 2 ? 30 : 20;
+
+    for (int fila = 1; fila < 12; fila++)
+    {
+        for (int columna = 1; columna < 14; columna++)
+        {
+            if (mapa.obtenerTipoCelda(fila, columna) == Mapa::DESTRUCTIBLE &&
+                !celdaTieneItemActivo(items, fila, columna) &&
+                (rand() % 100) < dropRate)
+            {
+                int tipo = seleccionarTipoItemArcade(nivelActual, vidaSpawneadaNivel);
+                items.emplace_back(fila, columna, tipo, false);
             }
         }
     }

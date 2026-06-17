@@ -51,6 +51,7 @@ private:
     bool bossActivo;
     bool solicitudAvance;
     bool victoriaArcade;
+    bool vidaSpawneadaNivel;
 };
 
 #endif
