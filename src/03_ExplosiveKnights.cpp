@@ -2095,7 +2095,12 @@ public:
           dirActual(static_cast<Direccion>(rand() % 4)),
           speed(4.5f),
           vivo(true),
-          texturaCargada(false)
+          texturaCargada(false),
+          frameWidth(0),
+          frameHeight(0),
+          frameActual(0),
+          acumuladorTiempo(0.0f),
+          tiempoFrame(0.15f)
     {
         bodyId = physics.createDynamicCircleBody(
             x,
@@ -2116,8 +2121,11 @@ public:
             sf::Vector2u size = textura.getSize();
             if (size.x > 0 && size.y > 0)
             {
-                sprite.setOrigin(size.x / 2.0f, size.y / 2.0f);
-                float escala = TAMANO_TILE / static_cast<float>(std::max(size.x, size.y));
+                frameWidth = static_cast<int>(size.x) / 4;
+                frameHeight = static_cast<int>(size.y) / 4;
+                sprite.setTextureRect(sf::IntRect(0, obtenerFilaDireccion() * frameHeight, frameWidth, frameHeight));
+                sprite.setOrigin(frameWidth / 2.0f, frameHeight / 2.0f);
+                float escala = TAMANO_TILE / static_cast<float>(std::max(frameWidth, frameHeight));
                 sprite.setScale(escala, escala);
             }
         }
@@ -2135,7 +2143,12 @@ public:
           dirActual(otro.dirActual),
           speed(otro.speed),
           vivo(otro.vivo),
-          texturaCargada(otro.texturaCargada)
+          texturaCargada(otro.texturaCargada),
+          frameWidth(otro.frameWidth),
+          frameHeight(otro.frameHeight),
+          frameActual(otro.frameActual),
+          acumuladorTiempo(otro.acumuladorTiempo),
+          tiempoFrame(otro.tiempoFrame)
     {
         if (texturaCargada)
         {
@@ -2157,6 +2170,11 @@ public:
             speed = otro.speed;
             vivo = otro.vivo;
             texturaCargada = otro.texturaCargada;
+            frameWidth = otro.frameWidth;
+            frameHeight = otro.frameHeight;
+            frameActual = otro.frameActual;
+            acumuladorTiempo = otro.acumuladorTiempo;
+            tiempoFrame = otro.tiempoFrame;
 
             if (texturaCargada)
             {
@@ -2170,7 +2188,7 @@ public:
         return *this;
     }
 
-    void update(Mapa& mapa, PhysicsSpace& physics)
+    void update(Mapa& mapa, PhysicsSpace& physics, float dt)
     {
         (void)physics;
         if (!vivo || !b2Body_IsValid(bodyId))
@@ -2197,7 +2215,11 @@ public:
         {
             elegirDireccionValidaDesdeCelda(mapa, filaActual, colActual);
             b2Body_SetLinearVelocity(bodyId, obtenerVelocidadDireccion());
+            velActual = b2Body_GetLinearVelocity(bodyId);
+            speedActual = std::sqrt(velActual.x * velActual.x + velActual.y * velActual.y);
         }
+
+        actualizarAnimacion(dt, speedActual > 0.1f);
     }
 
     void draw(sf::RenderWindow& window)
@@ -2243,6 +2265,47 @@ public:
     b2BodyId getBodyId() { return bodyId; }
 
 private:
+    int obtenerFilaDireccion() const
+    {
+        if (dirActual == ABAJO)
+            return 0;
+        if (dirActual == ARRIBA)
+            return 1;
+        if (dirActual == DERECHA)
+            return 2;
+        return 3;
+    }
+
+    void actualizarAnimacion(float dt, bool moviendose)
+    {
+        if (!texturaCargada || frameWidth <= 0 || frameHeight <= 0)
+        {
+            return;
+        }
+
+        if (moviendose)
+        {
+            acumuladorTiempo += dt;
+            if (acumuladorTiempo >= tiempoFrame)
+            {
+                acumuladorTiempo = 0.0f;
+                frameActual = (frameActual + 1) % 4;
+            }
+        }
+        else
+        {
+            frameActual = 0;
+            acumuladorTiempo = 0.0f;
+        }
+
+        sprite.setTextureRect(sf::IntRect(
+            frameActual * frameWidth,
+            obtenerFilaDireccion() * frameHeight,
+            frameWidth,
+            frameHeight
+        ));
+    }
+
     b2Vec2 obtenerVelocidadDireccion() const
     {
         b2Vec2 velocity = {0.0f, 0.0f};
@@ -2307,6 +2370,11 @@ private:
     float speed;
     bool vivo;
     bool texturaCargada;
+    int frameWidth;
+    int frameHeight;
+    int frameActual;
+    float acumuladorTiempo;
+    float tiempoFrame;
 };
 
 // ============== BOSS (FASE 6) ==============
@@ -4242,7 +4310,7 @@ int main()
         {
             if (enemigo.isVivo())
             {
-                enemigo.update(mapa, physics);
+                enemigo.update(mapa, physics, timeStep);
             }
         }
 
