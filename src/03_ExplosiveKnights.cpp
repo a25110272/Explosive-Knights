@@ -2189,8 +2189,105 @@ void llenarItemsIniciales(Mapa& mapa, std::vector<PowerUp>& items, int& corazone
     }
 }
 
-void dibujarItemsActivosHUD(sf::RenderWindow& window, const Knight& knight, sf::Font& fuente,
-                            const std::string& etiqueta, float x, float y)
+sf::Color obtenerColorItemHUD(int tipo)
+{
+    switch (tipo)
+    {
+    case ITEM_BOMBA_EXTRA:
+        return sf::Color(255, 184, 42);
+    case ITEM_ESCUDO:
+        return sf::Color(52, 190, 255);
+    case ITEM_FANTASMA:
+        return sf::Color(178, 126, 255);
+    case ITEM_VELOCIDAD:
+        return sf::Color(66, 225, 255);
+    case ITEM_PATEAR:
+        return sf::Color(245, 169, 55);
+    case ITEM_FLAMA:
+        return sf::Color(255, 82, 24);
+    default:
+        return sf::Color::White;
+    }
+}
+
+float obtenerProgresoItemHUD(float tiempo)
+{
+    if (tiempo <= 0.0f)
+    {
+        return 0.0f;
+    }
+
+    if (tiempo <= 1.0f)
+    {
+        return 1.0f;
+    }
+
+    return std::min(1.0f, tiempo / DURACION_ITEM_TEMPORAL);
+}
+
+void dibujarBombaDoradaHUD(sf::RenderWindow& window, float x, float y, float escala = 1.0f)
+{
+    sf::CircleShape cuerpo(7.0f * escala);
+    cuerpo.setOrigin(7.0f * escala, 7.0f * escala);
+    cuerpo.setPosition(x, y);
+    cuerpo.setFillColor(sf::Color(246, 184, 41));
+    cuerpo.setOutlineColor(sf::Color(100, 61, 10));
+    cuerpo.setOutlineThickness(2.0f * escala);
+    window.draw(cuerpo);
+
+    sf::RectangleShape brillo(sf::Vector2f(5.0f * escala, 4.0f * escala));
+    brillo.setOrigin(2.5f * escala, 2.0f * escala);
+    brillo.setPosition(x - 3.0f * escala, y - 4.0f * escala);
+    brillo.setFillColor(sf::Color(255, 244, 130));
+    window.draw(brillo);
+
+    sf::RectangleShape mecha(sf::Vector2f(4.0f * escala, 8.0f * escala));
+    mecha.setOrigin(2.0f * escala, 7.0f * escala);
+    mecha.setPosition(x + 4.0f * escala, y - 8.0f * escala);
+    mecha.setRotation(-35.0f);
+    mecha.setFillColor(sf::Color(128, 73, 18));
+    window.draw(mecha);
+
+    sf::CircleShape chispa(3.0f * escala, 5);
+    chispa.setOrigin(3.0f * escala, 3.0f * escala);
+    chispa.setPosition(x + 8.0f * escala, y - 13.0f * escala);
+    chispa.setFillColor(sf::Color(255, 238, 95));
+    window.draw(chispa);
+}
+
+void dibujarCorazonesVidaHUD(sf::RenderWindow& window, int vidas, float x, float y)
+{
+    sf::Texture* texturaVida = PowerUp::obtenerTextura(ITEM_VIDA);
+    int vidasADibujar = std::max(0, vidas);
+
+    for (int i = 0; i < vidasADibujar; i++)
+    {
+        float posX = x + static_cast<float>(i % 5) * 13.0f;
+        float posY = y - static_cast<float>(i / 5) * 12.0f;
+
+        if (texturaVida != nullptr)
+        {
+            sf::Sprite corazon;
+            corazon.setTexture(*texturaVida);
+            sf::Vector2u size = texturaVida->getSize();
+            corazon.setOrigin(size.x / 2.0f, size.y / 2.0f);
+            float escala = 12.0f / static_cast<float>(std::max(size.x, size.y));
+            corazon.setScale(escala, escala);
+            corazon.setPosition(posX, posY);
+            window.draw(corazon);
+        }
+        else
+        {
+            sf::CircleShape corazonFallback(4.0f);
+            corazonFallback.setOrigin(4.0f, 4.0f);
+            corazonFallback.setFillColor(sf::Color(240, 40, 60));
+            corazonFallback.setPosition(posX, posY);
+            window.draw(corazonFallback);
+        }
+    }
+}
+
+void dibujarBarrasItemsHUD(sf::RenderWindow& window, const Knight& knight, float x, float y)
 {
     const int tiposTemporales[6] = {
         ITEM_BOMBA_EXTRA,
@@ -2201,8 +2298,7 @@ void dibujarItemsActivosHUD(sf::RenderWindow& window, const Knight& knight, sf::
         ITEM_FLAMA
     };
 
-    float offsetX = 0.0f;
-    bool dibujoAlgo = false;
+    float offsetY = 0.0f;
 
     for (int tipo : tiposTemporales)
     {
@@ -2212,27 +2308,12 @@ void dibujarItemsActivosHUD(sf::RenderWindow& window, const Knight& knight, sf::
             continue;
         }
 
-        if (!dibujoAlgo)
-        {
-            sf::Text textoEtiqueta;
-            textoEtiqueta.setFont(fuente);
-            textoEtiqueta.setCharacterSize(16);
-            textoEtiqueta.setFillColor(sf::Color::White);
-            textoEtiqueta.setOutlineColor(sf::Color::Black);
-            textoEtiqueta.setOutlineThickness(2.0f);
-            textoEtiqueta.setString(etiqueta);
-            textoEtiqueta.setPosition(x, y + 8.0f);
-            window.draw(textoEtiqueta);
-            offsetX = 34.0f;
-            dibujoAlgo = true;
-        }
-
-        sf::RectangleShape fondoIcono(sf::Vector2f(72.0f, 36.0f));
-        fondoIcono.setFillColor(sf::Color(0, 0, 0, 135));
-        fondoIcono.setOutlineColor(sf::Color(255, 255, 255, 90));
-        fondoIcono.setOutlineThickness(1.0f);
-        fondoIcono.setPosition(x + offsetX, y);
-        window.draw(fondoIcono);
+        sf::RectangleShape fondo(sf::Vector2f(126.0f, 16.0f));
+        fondo.setFillColor(sf::Color(0, 0, 0, 150));
+        fondo.setOutlineColor(sf::Color(255, 255, 255, 80));
+        fondo.setOutlineThickness(1.0f);
+        fondo.setPosition(x, y + offsetY);
+        window.draw(fondo);
 
         sf::Texture* textura = PowerUp::obtenerTextura(tipo);
         if (textura != nullptr)
@@ -2241,24 +2322,82 @@ void dibujarItemsActivosHUD(sf::RenderWindow& window, const Knight& knight, sf::
             icono.setTexture(*textura);
             sf::Vector2u size = textura->getSize();
             icono.setOrigin(size.x / 2.0f, size.y / 2.0f);
-            float escala = 28.0f / static_cast<float>(std::max(size.x, size.y));
+            float escala = 18.0f / static_cast<float>(std::max(size.x, size.y));
             icono.setScale(escala, escala);
-            icono.setPosition(x + offsetX + 18.0f, y + 18.0f);
+            icono.setPosition(x + 10.0f, y + offsetY + 8.0f);
             window.draw(icono);
         }
 
-        sf::Text textoTiempo;
-        textoTiempo.setFont(fuente);
-        textoTiempo.setCharacterSize(16);
-        textoTiempo.setFillColor(sf::Color::White);
-        textoTiempo.setOutlineColor(sf::Color::Black);
-        textoTiempo.setOutlineThickness(2.0f);
-        textoTiempo.setString(std::to_string(static_cast<int>(std::ceil(tiempo))) + "s");
-        textoTiempo.setPosition(x + offsetX + 38.0f, y + 8.0f);
-        window.draw(textoTiempo);
+        float progreso = obtenerProgresoItemHUD(tiempo);
+        sf::RectangleShape barra(sf::Vector2f(96.0f * progreso, 8.0f));
+        barra.setFillColor(obtenerColorItemHUD(tipo));
+        barra.setPosition(x + 24.0f, y + offsetY + 4.0f);
+        window.draw(barra);
 
-        offsetX += 78.0f;
+        offsetY += 19.0f;
     }
+}
+
+void dibujarPanelJugadorHUD(sf::RenderWindow& window, const Knight& knight, int personaje,
+                            sf::Texture* texturaMarco, int rondasGanadas,
+                            const std::string& etiqueta, sf::Font* fuente, float x, float y)
+{
+    sf::RectangleShape sombra(sf::Vector2f(76.0f, 76.0f));
+    sombra.setPosition(x + 4.0f, y + 5.0f);
+    sombra.setFillColor(sf::Color(0, 0, 0, 120));
+    window.draw(sombra);
+
+    if (texturaMarco != nullptr)
+    {
+        sf::Sprite marco;
+        marco.setTexture(*texturaMarco);
+        sf::Vector2u size = texturaMarco->getSize();
+        if (size.x > 0 && size.y > 0)
+        {
+            marco.setScale(76.0f / static_cast<float>(size.x), 76.0f / static_cast<float>(size.y));
+        }
+        marco.setPosition(x, y);
+        window.draw(marco);
+    }
+    else
+    {
+        sf::RectangleShape marcoFallback(sf::Vector2f(76.0f, 76.0f));
+        marcoFallback.setPosition(x, y);
+        marcoFallback.setFillColor(sf::Color(30, 30, 40, 220));
+        sf::Color colorFallback = sf::Color(80, 220, 80);
+        if (personaje == 1)
+            colorFallback = sf::Color(255, 90, 60);
+        else if (personaje == 2)
+            colorFallback = sf::Color(70, 170, 255);
+        else if (personaje == 3)
+            colorFallback = sf::Color(150, 80, 255);
+        marcoFallback.setOutlineColor(colorFallback);
+        marcoFallback.setOutlineThickness(3.0f);
+        window.draw(marcoFallback);
+    }
+
+    if (fuente != nullptr)
+    {
+        sf::Text texto;
+        texto.setFont(*fuente);
+        texto.setCharacterSize(14);
+        texto.setFillColor(sf::Color::White);
+        texto.setOutlineColor(sf::Color::Black);
+        texto.setOutlineThickness(2.0f);
+        texto.setString(etiqueta);
+        texto.setPosition(x + 5.0f, y + 4.0f);
+        window.draw(texto);
+
+    }
+
+    dibujarCorazonesVidaHUD(window, knight.getVidas(), x + 13.0f, y + 62.0f);
+
+    for (int i = 0; i < rondasGanadas; i++)
+    {
+        dibujarBombaDoradaHUD(window, x + 18.0f + i * 19.0f, y + 86.0f, 0.82f);
+    }
+
+    dibujarBarrasItemsHUD(window, knight, x + 86.0f, y + 4.0f);
 }
 
 void cargarNivel(int nivel, Mapa& mapa, Knight& knight, std::vector<Enemigo>& enemigos,
@@ -2383,6 +2522,23 @@ std::string obtenerRutaBombaPersonaje(int personaje)
         "assets/images/Bomba_Roja.png",
         "assets/images/Bomba_Azul.png",
         "assets/images/Bomba_Negra.png"
+    };
+
+    if (personaje < 0 || personaje >= 4)
+    {
+        return rutas[0];
+    }
+
+    return rutas[personaje];
+}
+
+std::string obtenerRutaMarcoPersonaje(int personaje)
+{
+    const std::string rutas[4] = {
+        "assets/images/marco_verde.png",
+        "assets/images/marco_rojo.png",
+        "assets/images/marco_azul.png",
+        "assets/images/marco_negro.png"
     };
 
     if (personaje < 0 || personaje >= 4)
@@ -2570,6 +2726,8 @@ int main()
     int personajeSeleccionadoP2 = 2;
     int ganadorVersus = 0;
     int personajeGanadorVersus = 0;
+    int rondasGanadasP1 = 0;
+    int rondasGanadasP2 = 0;
     bool reinicioRondaPendiente = false;
     int perdedorRondaPendiente = 0;
     float tiempoRonda = DURACION_RONDA_VERSUS;
@@ -2596,6 +2754,17 @@ int main()
                 960.0f / static_cast<float>(size.x),
                 832.0f / static_cast<float>(size.y)
             );
+        }
+    }
+
+    std::array<sf::Texture, 4> texturasMarcosPersonajes;
+    std::array<bool, 4> marcosPersonajesCargados = {false, false, false, false};
+    for (int i = 0; i < 4; i++)
+    {
+        marcosPersonajesCargados[i] = texturasMarcosPersonajes[i].loadFromFile(obtenerRutaMarcoPersonaje(i));
+        if (!marcosPersonajesCargados[i])
+        {
+            std::cout << "Aviso: no se pudo cargar " << obtenerRutaMarcoPersonaje(i) << std::endl;
         }
     }
 
@@ -2732,6 +2901,8 @@ int main()
         nivelActual = 1;
         ganadorVersus = 0;
         personajeGanadorVersus = 0;
+        rondasGanadasP1 = 0;
+        rondasGanadasP2 = 0;
         reinicioRondaPendiente = false;
         perdedorRondaPendiente = 0;
         tiempoRonda = DURACION_RONDA_VERSUS;
@@ -2843,12 +3014,14 @@ int main()
 
         if (p1SinVidas)
         {
+            rondasGanadasP2++;
             cargarVictoriaVersus(2);
             return;
         }
 
         if (p2SinVidas)
         {
+            rondasGanadasP1++;
             cargarVictoriaVersus(1);
             return;
         }
@@ -2861,16 +3034,21 @@ int main()
 
         if (jugadorPerdedor == 1)
         {
+            rondasGanadasP2++;
             if (p1SinVidas)
             {
                 cargarVictoriaVersus(2);
                 return;
             }
         }
-        else if (p2SinVidas)
+        else if (jugadorPerdedor == 2)
         {
-            cargarVictoriaVersus(1);
-            return;
+            rondasGanadasP1++;
+            if (p2SinVidas)
+            {
+                cargarVictoriaVersus(1);
+                return;
+            }
         }
 
         reiniciarRondaVersus();
@@ -3078,6 +3256,8 @@ int main()
                         muerteSubita = false;
                         caidaTimer = INTERVALO_CAIDA_MUERTE_SUBITA;
                         indiceCaidaMuerteSubita = 0;
+                        rondasGanadasP1 = 0;
+                        rondasGanadasP2 = 0;
                         nivelActual = 1;
                         estadoActual = JUGANDO;
                     }
@@ -3867,11 +4047,37 @@ int main()
         // RENDER HUD (FASE 5)
         if (fuenteCargada)
         {
-            window.draw(textoHUD);
-            dibujarItemsActivosHUD(window, knight, fuente, "P1", 10.0f, 38.0f);
+            sf::Texture* marcoP1 = marcosPersonajesCargados[personajeSeleccionadoP1]
+                ? &texturasMarcosPersonajes[personajeSeleccionadoP1]
+                : nullptr;
+            dibujarPanelJugadorHUD(
+                window,
+                knight,
+                personajeSeleccionadoP1,
+                marcoP1,
+                (modoActual == MULTIJUGADOR) ? rondasGanadasP1 : 0,
+                "P1",
+                &fuente,
+                10.0f,
+                8.0f
+            );
+
             if (segundoJugadorActivo())
             {
-                dibujarItemsActivosHUD(window, knight2, fuente, "P2", 10.0f, 78.0f);
+                sf::Texture* marcoP2 = marcosPersonajesCargados[personajeSeleccionadoP2]
+                    ? &texturasMarcosPersonajes[personajeSeleccionadoP2]
+                    : nullptr;
+                dibujarPanelJugadorHUD(
+                    window,
+                    knight2,
+                    personajeSeleccionadoP2,
+                    marcoP2,
+                    (modoActual == MULTIJUGADOR) ? rondasGanadasP2 : 0,
+                    "P2",
+                    &fuente,
+                    738.0f,
+                    8.0f
+                );
             }
 
             if (modoActual == MULTIJUGADOR)
