@@ -75,7 +75,7 @@ const int PROBABILIDAD_ITEM_DESTRUCTIBLE = 70;
 const int MAX_CORAZONES_POR_MAPA = 1;
 const int PROBABILIDAD_CORAZON = 8;
 const float DURACION_ITEM_TEMPORAL = 10.0f;
-const float DURACION_ESCUDO_VERSUS = 15.0f;
+const float DURACION_ESCUDO_ITEM = 15.0f;
 const float TIEMPO_RESPAWN_ITEM = 20.0f;
 const float INCREMENTO_VELOCIDAD_VERSUS = 1.0f;
 const float VELOCIDAD_BOMBA_PATEADA = 8.0f;
@@ -1311,7 +1311,8 @@ public:
           maxBombas(1), rangoFuego(1), speed(6.5f),
           speedOriginal(6.5f), vidas(3), tiempoInvulnerable(0.0f),
           tiempoBombaExtra(0.0f), tiempoEscudo(0.0f), tiempoFantasma(0.0f),
-          tiempoVelocidad(0.0f), bombasExtraRonda(0), velocidadExtraRonda(0.0f),
+          tiempoVelocidad(0.0f), tiempoPatear(0.0f), tiempoFlama(0.0f),
+          bombasExtraRonda(0), velocidadExtraRonda(0.0f),
           fantasmaActivo(false), puedePatear(false), ignorandoDestructibles(false),
           idJugador(idJugador), rutaTexturaBomba("assets/images/Bomba_Verde.png")
     {
@@ -1420,33 +1421,27 @@ public:
         }
 
         actualizarTemporizador(tiempoEscudo, deltaTime);
+        actualizarTemporizador(tiempoBombaExtra, deltaTime);
+        actualizarTemporizador(tiempoVelocidad, deltaTime);
+        actualizarTemporizador(tiempoFantasma, deltaTime);
+        actualizarTemporizador(tiempoPatear, deltaTime);
+        actualizarTemporizador(tiempoFlama, deltaTime);
 
-        if (bombasExtraRonda <= 0)
-        {
-            actualizarTemporizador(tiempoBombaExtra, deltaTime);
-        }
-        if (velocidadExtraRonda <= 0.0f)
-        {
-            actualizarTemporizador(tiempoVelocidad, deltaTime);
-        }
-        if (!fantasmaActivo)
-        {
-            actualizarTemporizador(tiempoFantasma, deltaTime);
-        }
-
-        maxBombas = 1 + bombasExtraRonda;
+        maxBombas = 1;
         if (tiempoBombaExtra > 0.0f)
         {
-            maxBombas = std::max(maxBombas, 2);
+            maxBombas = 2;
         }
 
-        speed = speedOriginal + velocidadExtraRonda;
+        speed = speedOriginal;
         if (tiempoVelocidad > 0.0f)
         {
-            speed = std::max(speed, speedOriginal * 1.5f);
+            speed = speedOriginal * 1.5f;
         }
 
-        setIgnorarDestructibles(fantasmaActivo || tiempoFantasma > 0.0f);
+        puedePatear = tiempoPatear > 0.0f;
+        rangoFuego = tiempoFlama > 0.0f ? 2 : 1;
+        setIgnorarDestructibles(tiempoFantasma > 0.0f);
 
         personaje.update();
     }
@@ -1511,29 +1506,22 @@ public:
 
     void recolectarItem(int tipo, bool modoVersus = false)
     {
+        (void)modoVersus;
+
         if (tipo == ITEM_BOMBA_EXTRA)
         {
-            // Bota: aumentar velocidad
-            if (modoVersus)
-            {
-                bombasExtraRonda++;
-                maxBombas = 1 + bombasExtraRonda;
-            }
-            else
-            {
-                tiempoBombaExtra = DURACION_ITEM_TEMPORAL;
-                maxBombas = 2;
-            }
+            tiempoBombaExtra = DURACION_ITEM_TEMPORAL;
+            maxBombas = 2;
         }
         else if (tipo == ITEM_ESCUDO)
         {
             // Fuego: aumentar rango
-            tiempoEscudo = modoVersus ? DURACION_ESCUDO_VERSUS : DURACION_ITEM_TEMPORAL;
+            tiempoEscudo = DURACION_ESCUDO_ITEM;
         }
         else if (tipo == ITEM_FANTASMA)
         {
             // Bomba Extra: aumentar máximo de bombas
-            if (modoVersus)
+            if (false)
             {
                 fantasmaActivo = true;
                 tiempoFantasma = 0.0f;
@@ -1546,7 +1534,7 @@ public:
         }
         else if (tipo == ITEM_VELOCIDAD)
         {
-            if (modoVersus)
+            if (false)
             {
                 velocidadExtraRonda += INCREMENTO_VELOCIDAD_VERSUS;
                 speed = speedOriginal + velocidadExtraRonda;
@@ -1563,11 +1551,13 @@ public:
         }
         else if (tipo == ITEM_PATEAR)
         {
+            tiempoPatear = DURACION_ITEM_TEMPORAL;
             puedePatear = true;
         }
         else if (tipo == ITEM_FLAMA)
         {
-            rangoFuego++;
+            tiempoFlama = DURACION_ITEM_TEMPORAL;
+            rangoFuego = 2;
         }
     }
 
@@ -1579,7 +1569,18 @@ public:
     bool recibirDano(PhysicsSpace& physics, bool conservarMejoras = false)
     {
         (void)physics;
-        if (vidas <= 0 || tiempoInvulnerable > 0.0f || tiempoEscudo > 0.0f)
+        if (vidas <= 0)
+        {
+            return false;
+        }
+
+        if (tiempoEscudo > 0.0f)
+        {
+            tiempoEscudo = 0.0f;
+            return false;
+        }
+
+        if (tiempoInvulnerable > 0.0f)
         {
             return false;
         }
@@ -1660,17 +1661,17 @@ public:
     float getTiempoItem(int tipo) const
     {
         if (tipo == ITEM_BOMBA_EXTRA)
-            return bombasExtraRonda > 0 ? 1.0f : tiempoBombaExtra;
+            return tiempoBombaExtra;
         if (tipo == ITEM_ESCUDO)
             return tiempoEscudo;
         if (tipo == ITEM_FANTASMA)
-            return fantasmaActivo ? 1.0f : tiempoFantasma;
+            return tiempoFantasma;
         if (tipo == ITEM_VELOCIDAD)
-            return velocidadExtraRonda > 0.0f ? 1.0f : tiempoVelocidad;
+            return tiempoVelocidad;
         if (tipo == ITEM_PATEAR)
-            return puedePatear ? 1.0f : 0.0f;
+            return tiempoPatear;
         if (tipo == ITEM_FLAMA)
-            return rangoFuego > 1 ? 1.0f : 0.0f;
+            return tiempoFlama;
         return 0.0f;
     }
 
@@ -1693,6 +1694,8 @@ private:
         tiempoEscudo = 0.0f;
         tiempoFantasma = 0.0f;
         tiempoVelocidad = 0.0f;
+        tiempoPatear = 0.0f;
+        tiempoFlama = 0.0f;
         bombasExtraRonda = 0;
         velocidadExtraRonda = 0.0f;
         fantasmaActivo = false;
@@ -1755,6 +1758,8 @@ private:
     float tiempoEscudo;
     float tiempoFantasma;
     float tiempoVelocidad;
+    float tiempoPatear;
+    float tiempoFlama;
     int bombasExtraRonda;
     float velocidadExtraRonda;
     bool fantasmaActivo;
@@ -2210,19 +2215,15 @@ sf::Color obtenerColorItemHUD(int tipo)
     }
 }
 
-float obtenerProgresoItemHUD(float tiempo)
+float obtenerProgresoItemHUD(int tipo, float tiempo)
 {
     if (tiempo <= 0.0f)
     {
         return 0.0f;
     }
 
-    if (tiempo <= 1.0f)
-    {
-        return 1.0f;
-    }
-
-    return std::min(1.0f, tiempo / DURACION_ITEM_TEMPORAL);
+    float duracion = tipo == ITEM_ESCUDO ? DURACION_ESCUDO_ITEM : DURACION_ITEM_TEMPORAL;
+    return std::min(1.0f, tiempo / duracion);
 }
 
 void dibujarBombaDoradaHUD(sf::RenderWindow& window, float x, float y, float escala = 1.0f)
@@ -2328,7 +2329,7 @@ void dibujarBarrasItemsHUD(sf::RenderWindow& window, const Knight& knight, float
             window.draw(icono);
         }
 
-        float progreso = obtenerProgresoItemHUD(tiempo);
+        float progreso = obtenerProgresoItemHUD(tipo, tiempo);
         sf::RectangleShape barra(sf::Vector2f(96.0f * progreso, 8.0f));
         barra.setFillColor(obtenerColorItemHUD(tipo));
         barra.setPosition(x + 24.0f, y + offsetY + 4.0f);
@@ -2340,7 +2341,8 @@ void dibujarBarrasItemsHUD(sf::RenderWindow& window, const Knight& knight, float
 
 void dibujarPanelJugadorHUD(sf::RenderWindow& window, const Knight& knight, int personaje,
                             sf::Texture* texturaMarco, int rondasGanadas,
-                            const std::string& etiqueta, sf::Font* fuente, float x, float y)
+                            const std::string& etiqueta, sf::Font* fuente, float x, float y,
+                            bool barrasALaIzquierda = false)
 {
     sf::RectangleShape sombra(sf::Vector2f(76.0f, 76.0f));
     sombra.setPosition(x + 4.0f, y + 5.0f);
@@ -2397,7 +2399,8 @@ void dibujarPanelJugadorHUD(sf::RenderWindow& window, const Knight& knight, int 
         dibujarBombaDoradaHUD(window, x + 18.0f + i * 19.0f, y + 86.0f, 0.82f);
     }
 
-    dibujarBarrasItemsHUD(window, knight, x + 86.0f, y + 4.0f);
+    float barrasX = barrasALaIzquierda ? x - 136.0f : x + 86.0f;
+    dibujarBarrasItemsHUD(window, knight, barrasX, y + 4.0f);
 }
 
 void cargarNivel(int nivel, Mapa& mapa, Knight& knight, std::vector<Enemigo>& enemigos,
@@ -4075,8 +4078,9 @@ int main()
                     (modoActual == MULTIJUGADOR) ? rondasGanadasP2 : 0,
                     "P2",
                     &fuente,
-                    738.0f,
-                    8.0f
+                    874.0f,
+                    8.0f,
+                    true
                 );
             }
 
