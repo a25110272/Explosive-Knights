@@ -2263,8 +2263,8 @@ void dibujarCorazonesVidaHUD(sf::RenderWindow& window, int vidas, float x, float
 
     for (int i = 0; i < vidasADibujar; i++)
     {
-        float posX = x + static_cast<float>(i % 5) * 13.0f;
-        float posY = y - static_cast<float>(i / 5) * 12.0f;
+        float posX = x + static_cast<float>(i % 4) * 18.0f;
+        float posY = y + static_cast<float>(i / 4) * 16.0f;
 
         if (texturaVida != nullptr)
         {
@@ -2272,15 +2272,15 @@ void dibujarCorazonesVidaHUD(sf::RenderWindow& window, int vidas, float x, float
             corazon.setTexture(*texturaVida);
             sf::Vector2u size = texturaVida->getSize();
             corazon.setOrigin(size.x / 2.0f, size.y / 2.0f);
-            float escala = 12.0f / static_cast<float>(std::max(size.x, size.y));
+            float escala = 18.0f / static_cast<float>(std::max(size.x, size.y));
             corazon.setScale(escala, escala);
             corazon.setPosition(posX, posY);
             window.draw(corazon);
         }
         else
         {
-            sf::CircleShape corazonFallback(4.0f);
-            corazonFallback.setOrigin(4.0f, 4.0f);
+            sf::CircleShape corazonFallback(6.0f);
+            corazonFallback.setOrigin(6.0f, 6.0f);
             corazonFallback.setFillColor(sf::Color(240, 40, 60));
             corazonFallback.setPosition(posX, posY);
             window.draw(corazonFallback);
@@ -2392,11 +2392,11 @@ void dibujarPanelJugadorHUD(sf::RenderWindow& window, const Knight& knight, int 
 
     }
 
-    dibujarCorazonesVidaHUD(window, knight.getVidas(), x + 13.0f, y + 62.0f);
+    dibujarCorazonesVidaHUD(window, knight.getVidas(), x + 13.0f, y + 94.0f);
 
     for (int i = 0; i < rondasGanadas; i++)
     {
-        dibujarBombaDoradaHUD(window, x + 18.0f + i * 19.0f, y + 86.0f, 0.82f);
+        dibujarBombaDoradaHUD(window, x + 18.0f + i * 19.0f, y + 118.0f, 0.82f);
     }
 
     float barrasX = barrasALaIzquierda ? x - 136.0f : x + 86.0f;
