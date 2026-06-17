@@ -2214,7 +2214,7 @@ public:
             y,
             TAMANO_TILE * 0.40f,
             COLLISION_ENEMY,
-            COLLISION_ALL
+            COLLISION_ALL & ~COLLISION_ENEMY
         );
 
         texturaCargada = textura.loadFromFile(texturePath);
