@@ -2669,6 +2669,124 @@ std::string formatearTiempo(float segundos)
     return stream.str();
 }
 
+void dibujarTemporizadorBombaVersus(sf::RenderWindow& window, sf::Font& fuente, float tiempoRonda)
+{
+    float restante = std::clamp(tiempoRonda / DURACION_RONDA_VERSUS, 0.0f, 1.0f);
+    float progreso = 1.0f - restante;
+    float centroX = 480.0f;
+    float centroY = 48.0f;
+    float pulso = 1.0f + 0.08f * progreso * std::sin(tiempoRonda * 18.0f);
+    float radio = 19.0f * pulso;
+
+    sf::CircleShape sombra(radio + 4.0f);
+    sombra.setOrigin(radio + 4.0f, radio + 4.0f);
+    sombra.setPosition(centroX + 3.0f, centroY + 5.0f);
+    sombra.setFillColor(sf::Color(0, 0, 0, 130));
+    window.draw(sombra);
+
+    sf::CircleShape cuerpo(radio);
+    cuerpo.setOrigin(radio, radio);
+    cuerpo.setPosition(centroX, centroY);
+    cuerpo.setFillColor(sf::Color(24, 27, 38));
+    cuerpo.setOutlineColor(sf::Color(4, 5, 8, 210));
+    cuerpo.setOutlineThickness(2.0f);
+    window.draw(cuerpo);
+
+    if (restante > 0.0f)
+    {
+        int segmentos = std::max(3, static_cast<int>(std::ceil(72.0f * restante)));
+        float radioAro = radio + 6.0f;
+        float grosorAro = 5.0f;
+        float inicio = -90.0f * 3.14159265f / 180.0f;
+        float barrido = 2.0f * 3.14159265f * restante;
+        sf::VertexArray aro(sf::TriangleStrip, (segmentos + 1) * 2);
+
+        for (int i = 0; i <= segmentos; i++)
+        {
+            float t = static_cast<float>(i) / static_cast<float>(segmentos);
+            float angulo = inicio + barrido * t;
+            sf::Vector2f dir(std::cos(angulo), std::sin(angulo));
+            sf::Color colorAro = tiempoRonda <= 10.0f ? sf::Color(255, 74, 22) : sf::Color(244, 184, 55);
+            aro[i * 2].position = sf::Vector2f(centroX, centroY) + dir * (radioAro - grosorAro);
+            aro[i * 2 + 1].position = sf::Vector2f(centroX, centroY) + dir * (radioAro + grosorAro);
+            aro[i * 2].color = colorAro;
+            aro[i * 2 + 1].color = colorAro;
+        }
+
+        window.draw(aro);
+    }
+
+    sf::CircleShape brillo(5.0f * pulso);
+    brillo.setOrigin(5.0f * pulso, 5.0f * pulso);
+    brillo.setPosition(centroX - 7.0f, centroY - 8.0f);
+    brillo.setFillColor(sf::Color(116, 135, 170, 180));
+    window.draw(brillo);
+
+    sf::RectangleShape cuello(sf::Vector2f(16.0f, 10.0f));
+    cuello.setOrigin(8.0f, 5.0f);
+    cuello.setPosition(centroX, centroY - radio - 3.0f);
+    cuello.setFillColor(sf::Color(150, 94, 37));
+    cuello.setOutlineColor(sf::Color(58, 35, 14));
+    cuello.setOutlineThickness(2.0f);
+    window.draw(cuello);
+
+    sf::VertexArray mechaBase(sf::LinesStrip, 5);
+    sf::Vector2f puntos[5] = {
+        {centroX + 2.0f, centroY - radio - 8.0f},
+        {centroX + 12.0f, centroY - radio - 18.0f},
+        {centroX + 25.0f, centroY - radio - 19.0f},
+        {centroX + 35.0f, centroY - radio - 12.0f},
+        {centroX + 43.0f, centroY - radio - 18.0f}
+    };
+
+    for (int i = 0; i < 5; i++)
+    {
+        mechaBase[i].position = puntos[i];
+        mechaBase[i].color = sf::Color(82, 52, 24);
+    }
+    window.draw(mechaBase);
+
+    int segmentosRestantes = std::max(1, static_cast<int>(std::ceil(restante * 4.0f)));
+    sf::VertexArray mechaFuego(sf::LinesStrip, segmentosRestantes + 1);
+    int inicioMecha = 4 - segmentosRestantes;
+    for (int i = 0; i <= segmentosRestantes; i++)
+    {
+        mechaFuego[i].position = puntos[inicioMecha + i];
+        mechaFuego[i].color = tiempoRonda <= 10.0f ? sf::Color(255, 54, 21) : sf::Color(255, 190, 46);
+    }
+    window.draw(mechaFuego);
+
+    sf::Vector2f chispaPos = puntos[inicioMecha];
+    float chispaTamano = 5.0f + 4.0f * progreso + 2.0f * std::abs(std::sin(tiempoRonda * 20.0f));
+    sf::CircleShape chispa(chispaTamano, 7);
+    chispa.setOrigin(chispaTamano, chispaTamano);
+    chispa.setPosition(chispaPos);
+    chispa.setFillColor(sf::Color(255, 236, 80, 230));
+    window.draw(chispa);
+
+    if (tiempoRonda <= 0.0f)
+    {
+        sf::CircleShape explosion(38.0f, 16);
+        explosion.setOrigin(38.0f, 38.0f);
+        explosion.setPosition(centroX, centroY);
+        explosion.setFillColor(sf::Color(255, 120, 24, 150));
+        explosion.setOutlineColor(sf::Color(255, 235, 90, 230));
+        explosion.setOutlineThickness(4.0f);
+        window.draw(explosion);
+    }
+
+    sf::Text textoTiempo;
+    textoTiempo.setFont(fuente);
+    textoTiempo.setCharacterSize(19);
+    textoTiempo.setFillColor(tiempoRonda <= 10.0f ? sf::Color(255, 88, 50) : sf::Color::White);
+    textoTiempo.setOutlineColor(sf::Color::Black);
+    textoTiempo.setOutlineThickness(2.5f);
+    textoTiempo.setString(formatearTiempo(tiempoRonda));
+    sf::FloatRect bounds = textoTiempo.getLocalBounds();
+    textoTiempo.setPosition(centroX - bounds.left - bounds.width / 2.0f, centroY + 29.0f);
+    window.draw(textoTiempo);
+}
+
 sf::Vector2i obtenerCeldaBody(b2BodyId bodyId)
 {
     sf::Vector2f centro = obtenerCentroBody(bodyId);
@@ -4118,7 +4236,7 @@ int main()
 
             if (modoActual == MULTIJUGADOR)
             {
-                window.draw(textoTiempoVersus);
+                dibujarTemporizadorBombaVersus(window, fuente, tiempoRonda);
             }
         }
 
