@@ -1306,6 +1306,16 @@ void destruirItemsTocadosPorExplosion(const Explosion& explosion, std::vector<Po
 class Knight
 {
 public:
+    struct StatsArcade
+    {
+        int savedMaxBombas = 1;
+        int savedRangoExplosion = 1;
+        float savedVelocidad = 6.5f;
+        bool savedTieneBotaArcade = false;
+        bool savedTieneEscudo = false;
+        bool savedTieneFantasma = false;
+    };
+
     Knight(sf::Vector2f position, PhysicsSpace& physics,
            const std::string& rutaTextura = "assets/images/Verde_spritesheet.png",
            int idJugador = 1)
@@ -1842,6 +1852,50 @@ public:
         }
 
         personaje.setPhysicsPosition(-500.0f, -500.0f);
+    }
+
+    static StatsArcade statsArcadeBase()
+    {
+        return StatsArcade();
+    }
+
+    StatsArcade capturarStatsArcade() const
+    {
+        StatsArcade stats;
+        stats.savedMaxBombas = std::max(1, maxBombas);
+        stats.savedRangoExplosion = std::max(1, rangoFuego);
+        stats.savedVelocidad = speedOriginal + std::max(0.0f, velocidadExtraRonda);
+        stats.savedTieneBotaArcade = tieneBotaArcade || patearPermanente;
+        stats.savedTieneEscudo = escudoPermanente;
+        stats.savedTieneFantasma = fantasmaActivo;
+        return stats;
+    }
+
+    void restaurarStatsArcade(const StatsArcade& stats)
+    {
+        tiempoBombaExtra = 0.0f;
+        tiempoEscudo = 0.0f;
+        tiempoFantasma = 0.0f;
+        tiempoVelocidad = 0.0f;
+        tiempoPatear = 0.0f;
+        tiempoFlama = 0.0f;
+        timerFlama = 0.0f;
+        timerVelocidad = 0.0f;
+        timerEscudo = 0.0f;
+        timerFantasma = 0.0f;
+        timerBota = 0.0f;
+
+        maxBombas = std::max(1, stats.savedMaxBombas);
+        rangoFuego = std::max(1, stats.savedRangoExplosion);
+        velocidadExtraRonda = std::max(0.0f, stats.savedVelocidad - speedOriginal);
+        speed = speedOriginal + velocidadExtraRonda;
+        escudoPermanente = stats.savedTieneEscudo;
+        fantasmaActivo = stats.savedTieneFantasma;
+        tieneBotaArcade = stats.savedTieneBotaArcade;
+        patearPermanente = stats.savedTieneBotaArcade;
+        puedePatear = stats.savedTieneBotaArcade;
+        saliendoDeBloque = false;
+        setIgnorarDestructibles(fantasmaActivo);
     }
 
     b2BodyId getBodyId() { return bodyId; }
@@ -3859,6 +3913,9 @@ int main()
     int rondasGanadasP2 = 0;
     bool reinicioRondaPendiente = false;
     int perdedorRondaPendiente = 0;
+    Knight::StatsArcade statsArcadeP1 = Knight::statsArcadeBase();
+    Knight::StatsArcade statsArcadeP2 = Knight::statsArcadeBase();
+    bool statsArcadeValidos = false;
     float tiempoRonda = DURACION_RONDA_VERSUS;
     bool muerteSubita = false;
     float caidaTimer = INTERVALO_CAIDA_MUERTE_SUBITA;
@@ -4036,6 +4093,39 @@ int main()
 
     const float timeStep = 1.0f / 60.0f;  // 60 FPS
 
+    auto resetearCacheArcade = [&]()
+    {
+        statsArcadeP1 = Knight::statsArcadeBase();
+        statsArcadeP2 = Knight::statsArcadeBase();
+        statsArcadeValidos = false;
+    };
+
+    auto guardarCacheArcade = [&]()
+    {
+        statsArcadeP1 = knight.estaActivo() ? knight.capturarStatsArcade() : Knight::statsArcadeBase();
+        statsArcadeP2 = (gestorArcade.esCooperativo() && knight2.estaActivo())
+            ? knight2.capturarStatsArcade()
+            : Knight::statsArcadeBase();
+        statsArcadeValidos = true;
+    };
+
+    auto restaurarCacheArcade = [&]()
+    {
+        if (!statsArcadeValidos)
+        {
+            return;
+        }
+
+        if (knight.estaActivo() && knight.getVidas() > 0)
+        {
+            knight.restaurarStatsArcade(statsArcadeP1);
+        }
+        if (gestorArcade.esCooperativo() && knight2.estaActivo() && knight2.getVidas() > 0)
+        {
+            knight2.restaurarStatsArcade(statsArcadeP2);
+        }
+    };
+
     auto volverAlMenuPrincipal = [&]()
     {
         for (auto& bomba : listaBombas)
@@ -4080,6 +4170,7 @@ int main()
         caidaTimer = INTERVALO_CAIDA_MUERTE_SUBITA;
         indiceCaidaMuerteSubita = 0;
         corazonesSpawneados = 0;
+        resetearCacheArcade();
         texturaGanadorVersusCargada = false;
         texturaEmpateVersusCargada = false;
         puertaSalida.ocultar();
@@ -4352,6 +4443,14 @@ int main()
         if (recibioDano)
         {
             soltarItemsArcade(itemsParaSoltar, celdaMuerte.x, celdaMuerte.y);
+            if (&jugador == &knight)
+            {
+                statsArcadeP1 = Knight::statsArcadeBase();
+            }
+            else if (&jugador == &knight2)
+            {
+                statsArcadeP2 = Knight::statsArcadeBase();
+            }
         }
 
         return recibioDano;
@@ -4433,6 +4532,7 @@ int main()
                     {
                         modoActual = ARCADE;
                         gestorArcade.iniciar(jugadoresArcade);
+                        resetearCacheArcade();
                         temporizadoresRespawnItems.clear();
                         gestorArcade.cargarNivelActual(
                             mapa,
@@ -4560,6 +4660,7 @@ int main()
                     else
                     {
                         gestorArcade.iniciar(jugadoresArcade);
+                        resetearCacheArcade();
                         temporizadoresRespawnItems.clear();
                         gestorArcade.cargarNivelActual(
                             mapa,
@@ -4630,6 +4731,7 @@ int main()
                     corazonesSpawneados
                 );
                 nivelActual = gestorArcade.getNivelActual();
+                restaurarCacheArcade();
                 temporizadoresRespawnItems.clear();
                 estadoActual = JUGANDO_ARCADE;
             }
@@ -4984,6 +5086,7 @@ int main()
             else if ((!knight.estaActivo() || knight.getVidas() <= 0) &&
                      (!gestorArcade.esCooperativo() || !knight2.estaActivo() || knight2.getVidas() <= 0))
             {
+                resetearCacheArcade();
                 estadoActual = GAME_OVER;
                 std::cout << "GAME OVER ARCADE - Presiona ENTER para reiniciar" << std::endl;
             }
@@ -5025,6 +5128,7 @@ int main()
             }
             else if (modoActual == ARCADE && knight.getVidas() <= 0)
             {
+                resetearCacheArcade();
                 estadoActual = GAME_OVER;
                 std::cout << "GAME OVER - Presiona ENTER para reiniciar" << std::endl;
             }
@@ -5094,6 +5198,7 @@ int main()
 
             if (p1EnPuerta || p2EnPuerta)
             {
+                guardarCacheArcade();
                 gestorArcade.solicitarAvanceNivel();
                 estadoActual = TRANSICION_NIVEL;
             }
