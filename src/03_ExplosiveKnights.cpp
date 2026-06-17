@@ -2378,10 +2378,10 @@ private:
 };
 
 // ============== BOSS (FASE 6) ==============
-class Boss
+class BossLegacy
 {
 public:
-    Boss(float x, float y, PhysicsSpace& physics, const std::string& texturePath)
+    BossLegacy(float x, float y, PhysicsSpace& physics, const std::string& texturePath)
         : hp(3), cooldownDano(0), dirActual(Direccion::DERECHA), speed(3.5f)
     {
         // Crear cuerpo físico: DYNAMIC, 96x96 px, sin rotación
@@ -2412,7 +2412,7 @@ public:
                          sprite.getLocalBounds().height / 2.0f);
     }
 
-    Boss(const Boss& otro)
+    BossLegacy(const BossLegacy& otro)
         : bodyId(otro.bodyId),
           sprite(otro.sprite),
           textura(otro.textura),
@@ -2424,7 +2424,7 @@ public:
         sprite.setTexture(this->textura);
     }
 
-    Boss& operator=(const Boss& otro)
+    BossLegacy& operator=(const BossLegacy& otro)
     {
         if (this != &otro)
         {
@@ -2559,6 +2559,362 @@ private:
 };
 
 // ============== FIN BOSS ==============
+
+class Boss
+{
+public:
+    Boss(float x, float y, PhysicsSpace& physics, const std::string& texturePath)
+        : bodyId(b2_nullBodyId),
+          hp(10),
+          invulnerabilidad(0.0f),
+          dirActual(ABAJO),
+          speed(6.5f * 0.8f),
+          tiempoBomba(3.0f),
+          texturaCargada(false),
+          frameWidth(0),
+          frameHeight(0),
+          frameActual(0),
+          acumuladorTiempo(0.0f),
+          tiempoFrame(0.15f)
+    {
+        bodyId = physics.createDynamicCircleBody(
+            x,
+            y,
+            TAMANO_TILE * 0.45f,
+            COLLISION_ENEMY,
+            COLLISION_ALL
+        );
+
+        texturaCargada = textura.loadFromFile(texturePath);
+        if (!texturaCargada)
+        {
+            std::cerr << "Error: No se pudo cargar textura jefe: " << texturePath << std::endl;
+        }
+        else
+        {
+            sprite.setTexture(this->textura);
+            sf::Vector2u size = textura.getSize();
+            if (size.x > 0 && size.y > 0)
+            {
+                frameWidth = static_cast<int>(size.x) / 4;
+                frameHeight = static_cast<int>(size.y) / 4;
+                sprite.setTextureRect(sf::IntRect(0, obtenerFilaDireccion() * frameHeight, frameWidth, frameHeight));
+                sprite.setOrigin(frameWidth / 2.0f, frameHeight / 2.0f);
+                float escala = (TAMANO_TILE * 1.35f) / static_cast<float>(std::max(frameWidth, frameHeight));
+                sprite.setScale(escala, escala);
+            }
+        }
+    }
+
+    Boss(const Boss&) = delete;
+    Boss& operator=(const Boss&) = delete;
+
+    Boss(Boss&& otro) noexcept
+        : bodyId(otro.bodyId),
+          sprite(std::move(otro.sprite)),
+          textura(std::move(otro.textura)),
+          hp(otro.hp),
+          invulnerabilidad(otro.invulnerabilidad),
+          dirActual(otro.dirActual),
+          speed(otro.speed),
+          tiempoBomba(otro.tiempoBomba),
+          texturaCargada(otro.texturaCargada),
+          frameWidth(otro.frameWidth),
+          frameHeight(otro.frameHeight),
+          frameActual(otro.frameActual),
+          acumuladorTiempo(otro.acumuladorTiempo),
+          tiempoFrame(otro.tiempoFrame)
+    {
+        if (texturaCargada)
+        {
+            sprite.setTexture(this->textura);
+        }
+
+        otro.bodyId = b2_nullBodyId;
+        otro.hp = 0;
+    }
+
+    Boss& operator=(Boss&& otro) noexcept
+    {
+        if (this != &otro)
+        {
+            bodyId = otro.bodyId;
+            sprite = std::move(otro.sprite);
+            textura = std::move(otro.textura);
+            hp = otro.hp;
+            invulnerabilidad = otro.invulnerabilidad;
+            dirActual = otro.dirActual;
+            speed = otro.speed;
+            tiempoBomba = otro.tiempoBomba;
+            texturaCargada = otro.texturaCargada;
+            frameWidth = otro.frameWidth;
+            frameHeight = otro.frameHeight;
+            frameActual = otro.frameActual;
+            acumuladorTiempo = otro.acumuladorTiempo;
+            tiempoFrame = otro.tiempoFrame;
+
+            if (texturaCargada)
+            {
+                sprite.setTexture(this->textura);
+            }
+
+            otro.bodyId = b2_nullBodyId;
+            otro.hp = 0;
+        }
+
+        return *this;
+    }
+
+    void update(Mapa& mapa, PhysicsSpace& physics, Knight& jugador1, Knight& jugador2,
+                bool usarJugador2, std::vector<Bomba>& bombas, float dt)
+    {
+        (void)mapa;
+        if (!b2Body_IsValid(bodyId) || hp <= 0)
+        {
+            return;
+        }
+
+        if (invulnerabilidad > 0.0f)
+        {
+            invulnerabilidad -= dt;
+            if (invulnerabilidad < 0.0f)
+            {
+                invulnerabilidad = 0.0f;
+            }
+        }
+
+        b2Vec2 pos = b2Body_GetPosition(bodyId);
+        float bossX = pos.x * PIXELS_PER_METER;
+        float bossY = pos.y * PIXELS_PER_METER;
+
+        Knight* objetivo = elegirObjetivo(jugador1, jugador2, usarJugador2, bossX, bossY);
+        bool moviendose = false;
+        if (objetivo != nullptr && b2Body_IsValid(objetivo->getBodyId()))
+        {
+            b2Vec2 posObjetivo = b2Body_GetPosition(objetivo->getBodyId());
+            float objetivoX = posObjetivo.x * PIXELS_PER_METER;
+            float objetivoY = posObjetivo.y * PIXELS_PER_METER;
+            float dx = objetivoX - bossX;
+            float dy = objetivoY - bossY;
+
+            if (std::abs(dx) > std::abs(dy))
+            {
+                dirActual = dx >= 0.0f ? DERECHA : IZQUIERDA;
+            }
+            else
+            {
+                dirActual = dy >= 0.0f ? ABAJO : ARRIBA;
+            }
+
+            b2Body_SetLinearVelocity(bodyId, obtenerVelocidadDireccion());
+            moviendose = true;
+        }
+        else
+        {
+            b2Body_SetLinearVelocity(bodyId, {0.0f, 0.0f});
+        }
+
+        tiempoBomba -= dt;
+        if (tiempoBomba <= 0.0f)
+        {
+            tiempoBomba = 3.0f;
+            plantarBombaJefe(physics, bombas);
+        }
+
+        actualizarAnimacion(dt, moviendose);
+    }
+
+    void recibirDano()
+    {
+        if (invulnerabilidad <= 0.0f && hp > 0)
+        {
+            hp--;
+            invulnerabilidad = 1.5f;
+        }
+    }
+
+    void destruir(PhysicsSpace& physics)
+    {
+        (void)physics;
+        if (b2Body_IsValid(bodyId))
+        {
+            b2DestroyBody(bodyId);
+        }
+        bodyId = b2_nullBodyId;
+    }
+
+    void draw(sf::RenderWindow& window)
+    {
+        if (!b2Body_IsValid(bodyId) || hp <= 0)
+        {
+            return;
+        }
+
+        b2Vec2 pos = b2Body_GetPosition(bodyId);
+        float pixelX = pos.x * PIXELS_PER_METER;
+        float pixelY = pos.y * PIXELS_PER_METER;
+
+        if (texturaCargada)
+        {
+            sprite.setPosition(pixelX, pixelY);
+            if (invulnerabilidad > 0.0f)
+            {
+                int fase = static_cast<int>(invulnerabilidad * 20.0f);
+                sprite.setColor((fase % 2 == 0) ? sf::Color(255, 80, 80, 255) : sf::Color::White);
+            }
+            else
+            {
+                sprite.setColor(sf::Color::White);
+            }
+            window.draw(sprite);
+        }
+        else
+        {
+            sf::CircleShape fallback(TAMANO_TILE * 0.45f);
+            fallback.setOrigin(TAMANO_TILE * 0.45f, TAMANO_TILE * 0.45f);
+            fallback.setFillColor(invulnerabilidad > 0.0f ? sf::Color(255, 80, 80) : sf::Color(80, 20, 130));
+            fallback.setOutlineColor(sf::Color::Black);
+            fallback.setOutlineThickness(3.0f);
+            fallback.setPosition(pixelX, pixelY);
+            window.draw(fallback);
+        }
+    }
+
+    int getHp() const { return hp; }
+    b2BodyId getBodyId() { return bodyId; }
+
+private:
+    Knight* elegirObjetivo(Knight& jugador1, Knight& jugador2, bool usarJugador2, float bossX, float bossY)
+    {
+        Knight* mejor = nullptr;
+        float mejorDistancia = 999999.0f;
+
+        auto evaluar = [&](Knight& jugador)
+        {
+            if (!jugador.estaActivo() || !b2Body_IsValid(jugador.getBodyId()))
+            {
+                return;
+            }
+
+            b2Vec2 posJugador = b2Body_GetPosition(jugador.getBodyId());
+            float dx = posJugador.x * PIXELS_PER_METER - bossX;
+            float dy = posJugador.y * PIXELS_PER_METER - bossY;
+            float distancia = dx * dx + dy * dy;
+            if (distancia < mejorDistancia)
+            {
+                mejorDistancia = distancia;
+                mejor = &jugador;
+            }
+        };
+
+        evaluar(jugador1);
+        if (usarJugador2)
+        {
+            evaluar(jugador2);
+        }
+
+        return mejor;
+    }
+
+    void plantarBombaJefe(PhysicsSpace& physics, std::vector<Bomba>& bombas)
+    {
+        if (!b2Body_IsValid(bodyId))
+        {
+            return;
+        }
+
+        b2Vec2 pos = b2Body_GetPosition(bodyId);
+        int columna = static_cast<int>((pos.x * PIXELS_PER_METER) / 64.0f);
+        int fila = static_cast<int>((pos.y * PIXELS_PER_METER) / 64.0f);
+
+        if (fila < 0 || fila >= 13 || columna < 0 || columna >= 15)
+        {
+            return;
+        }
+
+        for (const auto& bomba : bombas)
+        {
+            if (bomba.isActiva() && bomba.estaEnCelda(fila, columna))
+            {
+                return;
+            }
+        }
+
+        bombas.emplace_back(fila, columna, physics, 2, 99, "assets/images/Bomba_Jefe.png");
+    }
+
+    int obtenerFilaDireccion() const
+    {
+        if (dirActual == ABAJO)
+            return 0;
+        if (dirActual == ARRIBA)
+            return 1;
+        if (dirActual == DERECHA)
+            return 2;
+        return 3;
+    }
+
+    void actualizarAnimacion(float dt, bool moviendose)
+    {
+        if (!texturaCargada || frameWidth <= 0 || frameHeight <= 0)
+        {
+            return;
+        }
+
+        if (moviendose)
+        {
+            acumuladorTiempo += dt;
+            if (acumuladorTiempo >= tiempoFrame)
+            {
+                acumuladorTiempo = 0.0f;
+                frameActual = (frameActual + 1) % 4;
+            }
+        }
+        else
+        {
+            frameActual = 0;
+            acumuladorTiempo = 0.0f;
+        }
+
+        sprite.setTextureRect(sf::IntRect(
+            frameActual * frameWidth,
+            obtenerFilaDireccion() * frameHeight,
+            frameWidth,
+            frameHeight
+        ));
+    }
+
+    b2Vec2 obtenerVelocidadDireccion() const
+    {
+        b2Vec2 velocity = {0.0f, 0.0f};
+
+        if (dirActual == ARRIBA)
+            velocity.y = -speed;
+        else if (dirActual == ABAJO)
+            velocity.y = speed;
+        else if (dirActual == DERECHA)
+            velocity.x = speed;
+        else if (dirActual == IZQUIERDA)
+            velocity.x = -speed;
+
+        return velocity;
+    }
+
+    b2BodyId bodyId;
+    sf::Sprite sprite;
+    sf::Texture textura;
+    int hp;
+    float invulnerabilidad;
+    Direccion dirActual;
+    float speed;
+    float tiempoBomba;
+    bool texturaCargada;
+    int frameWidth;
+    int frameHeight;
+    int frameActual;
+    float acumuladorTiempo;
+    float tiempoFrame;
+};
 
 // ============== FUNCIÓN CARGAR NIVEL (FASE 5 y 6) ==============
 int contarItemsActivos(const std::vector<PowerUp>& items)
@@ -4331,7 +4687,7 @@ int main()
         // UPDATE BOSS (FASE 6)
         for (auto& boss : listaJefes)
         {
-            boss.update(mapa, physics);
+            boss.update(mapa, physics, knight, knight2, segundoJugadorActivo(), listaBombas, timeStep);
         }
 
         // Daño a Boss por explosiones (FASE 6)

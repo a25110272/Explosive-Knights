@@ -154,7 +154,7 @@ void GestorArcade::update(Mapa& mapa, PhysicsSpace& physics, std::vector<Enemigo
         bossPendiente = true;
         float bossX = 7.0f * 64.0f + 32.0f;
         float bossY = 6.0f * 64.0f + 32.0f;
-        jefes.emplace_back(bossX, bossY, physics, "assets/images/Negro_spritesheet.png");
+        jefes.emplace_back(bossX, bossY, physics, "assets/images/Jefe_final.png");
         bossActivo = true;
         std::cout << "Jefe Final preparado. Bomba de jefe: assets/images/Bomba_Jefe.png" << std::endl;
     }
