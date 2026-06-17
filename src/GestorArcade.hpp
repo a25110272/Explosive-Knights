@@ -2,6 +2,7 @@
 #define GESTOR_ARCADE_HPP
 
 #include <string>
+#include <utility>
 #include <vector>
 
 class Mapa;
@@ -38,6 +39,10 @@ private:
     std::string obtenerFondoNivel() const;
     int obtenerTemaObjetosNivel() const;
     void colocarPuertaDeNivel(Mapa& mapa, PhysicsSpace& physics, Puerta& puerta);
+    void spawnearEnemigosNivel(Mapa& mapa, PhysicsSpace& physics, std::vector<Enemigo>& enemigos);
+    std::string obtenerRutaEnemigo(int tipo) const;
+    bool celdaSpawnEnemigoValida(Mapa& mapa, int fila, int columna,
+                                  const std::vector<std::pair<int, int>>& ocupadas) const;
 
     int nivelActual;
     int cantidadJugadores;

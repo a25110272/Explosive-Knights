@@ -69,6 +69,7 @@ const uint32_t COLLISION_PLAYER = 0x0002;
 const uint32_t COLLISION_BOMB = 0x0004;
 const uint32_t COLLISION_INDESTRUCTIBLE = 0x0008;
 const uint32_t COLLISION_DESTRUCTIBLE = 0x0010;
+const uint32_t COLLISION_ENEMY = 0x0020;
 const uint32_t COLLISION_ALL = 0xFFFFFFFF;
 const int MAX_ITEMS_ACTIVOS = 3;
 const int PROBABILIDAD_ITEM_DESTRUCTIBLE = 70;
@@ -1313,7 +1314,8 @@ public:
           tiempoBombaExtra(0.0f), tiempoEscudo(0.0f), tiempoFantasma(0.0f),
           tiempoVelocidad(0.0f), tiempoPatear(0.0f), tiempoFlama(0.0f),
           bombasExtraRonda(0), velocidadExtraRonda(0.0f),
-          fantasmaActivo(false), puedePatear(false), ignorandoDestructibles(false),
+          fantasmaActivo(false), puedePatear(false), patearPermanente(false),
+          ignorandoDestructibles(false), activo(true),
           idJugador(idJugador), rutaTexturaBomba("assets/images/Bomba_Verde.png")
     {
         // Crear cuerpo dinámico en Box2D v3.0
@@ -1345,6 +1347,15 @@ public:
                      sf::Keyboard::Key teclaDerecha,
                      sf::Keyboard::Key teclaIzquierda)
     {
+        if (!activo)
+        {
+            if (b2Body_IsValid(bodyId))
+            {
+                b2Body_SetLinearVelocity(bodyId, {0.0f, 0.0f});
+            }
+            return;
+        }
+
         // Usar la velocidad del Knight (modificable por power-ups)
         
         b2Vec2 velocity = {0.0f, 0.0f};
@@ -1411,6 +1422,11 @@ public:
 
     void update(float deltaTime)
     {
+        if (!activo)
+        {
+            return;
+        }
+
         if (tiempoInvulnerable > 0.0f)
         {
             tiempoInvulnerable -= deltaTime;
@@ -1427,27 +1443,35 @@ public:
         actualizarTemporizador(tiempoPatear, deltaTime);
         actualizarTemporizador(tiempoFlama, deltaTime);
 
-        maxBombas = 1;
-        if (tiempoBombaExtra > 0.0f)
+        maxBombas = 1 + bombasExtraRonda;
+        if (bombasExtraRonda == 0 && tiempoBombaExtra > 0.0f)
         {
             maxBombas = 2;
         }
 
-        speed = speedOriginal;
-        if (tiempoVelocidad > 0.0f)
+        speed = speedOriginal + velocidadExtraRonda;
+        if (velocidadExtraRonda <= 0.0f && tiempoVelocidad > 0.0f)
         {
             speed = speedOriginal * 1.5f;
         }
 
-        puedePatear = tiempoPatear > 0.0f;
-        rangoFuego = tiempoFlama > 0.0f ? 2 : 1;
-        setIgnorarDestructibles(tiempoFantasma > 0.0f);
+        puedePatear = patearPermanente || tiempoPatear > 0.0f;
+        if (rangoFuego <= 1 && tiempoFlama > 0.0f)
+        {
+            rangoFuego = 2;
+        }
+        setIgnorarDestructibles(fantasmaActivo || tiempoFantasma > 0.0f);
 
         personaje.update();
     }
 
     void draw(sf::RenderWindow& window)
     {
+        if (!activo)
+        {
+            return;
+        }
+
         personaje.draw(window);
     }
 
@@ -1466,6 +1490,11 @@ public:
     void plantarBomba(Mapa& mapa, std::vector<Bomba>& bombas, PhysicsSpace& physics, int propietario = 0)
     {
         // Verificar que no se supere el máximo de bombas
+        if (!activo || !b2Body_IsValid(bodyId))
+        {
+            return;
+        }
+
         int bombasActivas = 0;
         for (const auto& bomba : bombas)
         {
@@ -1506,22 +1535,28 @@ public:
 
     void recolectarItem(int tipo, bool modoVersus = false)
     {
-        (void)modoVersus;
-
         if (tipo == ITEM_BOMBA_EXTRA)
         {
-            tiempoBombaExtra = DURACION_ITEM_TEMPORAL;
-            maxBombas = 2;
+            if (modoVersus)
+            {
+                bombasExtraRonda++;
+                maxBombas = 1 + bombasExtraRonda;
+                tiempoBombaExtra = 0.0f;
+            }
+            else
+            {
+                tiempoBombaExtra = DURACION_ITEM_TEMPORAL;
+                maxBombas = 2;
+            }
         }
         else if (tipo == ITEM_ESCUDO)
         {
-            // Fuego: aumentar rango
             tiempoEscudo = DURACION_ESCUDO_ITEM;
         }
         else if (tipo == ITEM_FANTASMA)
         {
             // Bomba Extra: aumentar máximo de bombas
-            if (false)
+            if (modoVersus)
             {
                 fantasmaActivo = true;
                 tiempoFantasma = 0.0f;
@@ -1534,10 +1569,11 @@ public:
         }
         else if (tipo == ITEM_VELOCIDAD)
         {
-            if (false)
+            if (modoVersus)
             {
                 velocidadExtraRonda += INCREMENTO_VELOCIDAD_VERSUS;
                 speed = speedOriginal + velocidadExtraRonda;
+                tiempoVelocidad = 0.0f;
             }
             else
             {
@@ -1551,13 +1587,30 @@ public:
         }
         else if (tipo == ITEM_PATEAR)
         {
-            tiempoPatear = DURACION_ITEM_TEMPORAL;
-            puedePatear = true;
+            if (modoVersus)
+            {
+                patearPermanente = true;
+                tiempoPatear = 0.0f;
+                puedePatear = true;
+            }
+            else
+            {
+                tiempoPatear = DURACION_ITEM_TEMPORAL;
+                puedePatear = true;
+            }
         }
         else if (tipo == ITEM_FLAMA)
         {
-            tiempoFlama = DURACION_ITEM_TEMPORAL;
-            rangoFuego = 2;
+            if (modoVersus)
+            {
+                rangoFuego++;
+                tiempoFlama = 0.0f;
+            }
+            else
+            {
+                tiempoFlama = DURACION_ITEM_TEMPORAL;
+                rangoFuego = 2;
+            }
         }
     }
 
@@ -1569,7 +1622,7 @@ public:
     bool recibirDano(PhysicsSpace& physics, bool conservarMejoras = false)
     {
         (void)physics;
-        if (vidas <= 0)
+        if (!activo || vidas <= 0)
         {
             return false;
         }
@@ -1612,9 +1665,46 @@ public:
         return true;
     }
 
+    bool recibirDanoArcade(PhysicsSpace& physics)
+    {
+        (void)physics;
+        if (!activo || vidas <= 0)
+        {
+            return false;
+        }
+
+        if (tiempoEscudo > 0.0f)
+        {
+            tiempoEscudo = 0.0f;
+            return false;
+        }
+
+        if (tiempoInvulnerable > 0.0f)
+        {
+            return false;
+        }
+
+        vidas--;
+        limpiarInventarioRonda();
+
+        if (vidas > 0)
+        {
+            tiempoInvulnerable = 2.0f;
+            activarArcade();
+            moverA(posicionOriginal.x, posicionOriginal.y);
+        }
+        else
+        {
+            desactivarArcade();
+        }
+
+        return true;
+    }
+
     void reiniciar(float x, float y)
     {
         posicionOriginal = sf::Vector2f(x, y);
+        activo = true;
 
         if (b2Body_IsValid(bodyId))
         {
@@ -1635,6 +1725,7 @@ public:
     void reiniciarRonda(float x, float y)
     {
         posicionOriginal = sf::Vector2f(x, y);
+        activo = true;
 
         if (b2Body_IsValid(bodyId))
         {
@@ -1650,14 +1741,86 @@ public:
         limpiarInventarioRonda();
     }
 
+    void moverA(float x, float y)
+    {
+        if (b2Body_IsValid(bodyId))
+        {
+            b2Transform transform = {{x / PIXELS_PER_METER, y / PIXELS_PER_METER}, b2Rot_identity};
+            b2Body_SetTransform(bodyId, transform.p, transform.q);
+            b2Body_SetLinearVelocity(bodyId, {0.0f, 0.0f});
+        }
+
+        personaje.setPhysicsPosition(x, y);
+    }
+
+    void activarArcade()
+    {
+        activo = true;
+    }
+
+    void desactivarArcade()
+    {
+        activo = false;
+        if (b2Body_IsValid(bodyId))
+        {
+            b2Transform transform = {{-500.0f / PIXELS_PER_METER, -500.0f / PIXELS_PER_METER}, b2Rot_identity};
+            b2Body_SetTransform(bodyId, transform.p, transform.q);
+            b2Body_SetLinearVelocity(bodyId, {0.0f, 0.0f});
+        }
+
+        personaje.setPhysicsPosition(-500.0f, -500.0f);
+    }
+
     b2BodyId getBodyId() { return bodyId; }
     int getRangoFuego() const { return rangoFuego; }
     int getMaxBombas() const { return maxBombas; }
     int getVidas() const { return vidas; }
     void setVidas(int nuevasVidas) { vidas = nuevasVidas; }
+    bool estaActivo() const { return activo; }
     Direccion getDireccionActual() const { return direccionActual; }
     bool puedePatearBombas() const { return puedePatear; }
     bool tieneFantasma() const { return fantasmaActivo || tiempoFantasma > 0.0f; }
+    std::vector<int> obtenerItemsParaSoltar() const
+    {
+        std::vector<int> items;
+
+        int bombasExtra = std::max(0, maxBombas - 1);
+        for (int i = 0; i < bombasExtra; i++)
+        {
+            items.push_back(ITEM_BOMBA_EXTRA);
+        }
+
+        int flamasExtra = std::max(0, rangoFuego - 1);
+        for (int i = 0; i < flamasExtra; i++)
+        {
+            items.push_back(ITEM_FLAMA);
+        }
+
+        int velocidadesExtra = 0;
+        if (velocidadExtraRonda > 0.0f)
+        {
+            velocidadesExtra = static_cast<int>(std::ceil(velocidadExtraRonda / INCREMENTO_VELOCIDAD_VERSUS));
+        }
+        else if (tiempoVelocidad > 0.0f)
+        {
+            velocidadesExtra = 1;
+        }
+        for (int i = 0; i < velocidadesExtra; i++)
+        {
+            items.push_back(ITEM_VELOCIDAD);
+        }
+
+        if (fantasmaActivo || tiempoFantasma > 0.0f)
+        {
+            items.push_back(ITEM_FANTASMA);
+        }
+        if (patearPermanente || tiempoPatear > 0.0f)
+        {
+            items.push_back(ITEM_PATEAR);
+        }
+
+        return items;
+    }
     float getTiempoItem(int tipo) const
     {
         if (tipo == ITEM_BOMBA_EXTRA)
@@ -1700,6 +1863,7 @@ private:
         velocidadExtraRonda = 0.0f;
         fantasmaActivo = false;
         puedePatear = false;
+        patearPermanente = false;
         maxBombas = 1;
         speed = speedOriginal;
         setIgnorarDestructibles(false);
@@ -1764,7 +1928,9 @@ private:
     float velocidadExtraRonda;
     bool fantasmaActivo;
     bool puedePatear;
+    bool patearPermanente;
     bool ignorandoDestructibles;
+    bool activo;
     int idJugador;
     std::string rutaTexturaBomba;
 };
@@ -1772,10 +1938,10 @@ private:
 // ============== FIN KNIGHT - Box2D v3.0 ==============
 
 // ============== ENEMIGO (FASE 4: Enemigos e IA de Patrullaje) ==============
-class Enemigo
+class EnemigoLegacy
 {
 public:
-    Enemigo(float x, float y, PhysicsSpace& physics, const std::string& texturePath)
+    EnemigoLegacy(float x, float y, PhysicsSpace& physics, const std::string& texturePath)
         : speed(6.0f), vivo(true), dirActual(ABAJO)
     {
         // Crear cuerpo dinámico en Box2D v3.0
@@ -1792,7 +1958,7 @@ public:
         sprite.setPosition(x - 12.0f, y - 12.0f);  // Centrar sprite
     }
 
-    Enemigo(const Enemigo& otro)
+    EnemigoLegacy(const EnemigoLegacy& otro)
         : bodyId(otro.bodyId),
           sprite(otro.sprite),
           textura(otro.textura),
@@ -1803,7 +1969,7 @@ public:
         sprite.setTexture(this->textura);
     }
 
-    Enemigo& operator=(const Enemigo& otro)
+    EnemigoLegacy& operator=(const EnemigoLegacy& otro)
     {
         if (this != &otro)
         {
@@ -1920,6 +2086,228 @@ private:
 };
 
 // ============== FIN ENEMIGO ==============
+
+class Enemigo
+{
+public:
+    Enemigo(float x, float y, PhysicsSpace& physics, const std::string& texturePath)
+        : bodyId(b2_nullBodyId),
+          dirActual(static_cast<Direccion>(rand() % 4)),
+          speed(4.5f),
+          vivo(true),
+          texturaCargada(false)
+    {
+        bodyId = physics.createDynamicCircleBody(
+            x,
+            y,
+            TAMANO_TILE * 0.40f,
+            COLLISION_ENEMY,
+            COLLISION_ALL
+        );
+
+        texturaCargada = textura.loadFromFile(texturePath);
+        if (!texturaCargada)
+        {
+            std::cerr << "Error: No se pudo cargar textura enemigo: " << texturePath << std::endl;
+        }
+        else
+        {
+            sprite.setTexture(this->textura);
+            sf::Vector2u size = textura.getSize();
+            if (size.x > 0 && size.y > 0)
+            {
+                sprite.setOrigin(size.x / 2.0f, size.y / 2.0f);
+                float escala = TAMANO_TILE / static_cast<float>(std::max(size.x, size.y));
+                sprite.setScale(escala, escala);
+            }
+        }
+
+        sprite.setPosition(x, y);
+    }
+
+    Enemigo(const Enemigo&) = delete;
+    Enemigo& operator=(const Enemigo&) = delete;
+
+    Enemigo(Enemigo&& otro) noexcept
+        : bodyId(otro.bodyId),
+          sprite(std::move(otro.sprite)),
+          textura(std::move(otro.textura)),
+          dirActual(otro.dirActual),
+          speed(otro.speed),
+          vivo(otro.vivo),
+          texturaCargada(otro.texturaCargada)
+    {
+        if (texturaCargada)
+        {
+            sprite.setTexture(this->textura);
+        }
+
+        otro.bodyId = b2_nullBodyId;
+        otro.vivo = false;
+    }
+
+    Enemigo& operator=(Enemigo&& otro) noexcept
+    {
+        if (this != &otro)
+        {
+            bodyId = otro.bodyId;
+            sprite = std::move(otro.sprite);
+            textura = std::move(otro.textura);
+            dirActual = otro.dirActual;
+            speed = otro.speed;
+            vivo = otro.vivo;
+            texturaCargada = otro.texturaCargada;
+
+            if (texturaCargada)
+            {
+                sprite.setTexture(this->textura);
+            }
+
+            otro.bodyId = b2_nullBodyId;
+            otro.vivo = false;
+        }
+
+        return *this;
+    }
+
+    void update(Mapa& mapa, PhysicsSpace& physics)
+    {
+        (void)physics;
+        if (!vivo || !b2Body_IsValid(bodyId))
+        {
+            return;
+        }
+
+        b2Vec2 pos = b2Body_GetPosition(bodyId);
+        float pixelX = pos.x * PIXELS_PER_METER;
+        float pixelY = pos.y * PIXELS_PER_METER;
+        int filaActual = static_cast<int>(pixelY / 64.0f);
+        int colActual = static_cast<int>(pixelX / 64.0f);
+
+        if (!siguienteCeldaLibre(mapa, filaActual, colActual))
+        {
+            elegirDireccionValidaDesdeCelda(mapa, filaActual, colActual);
+        }
+
+        b2Body_SetLinearVelocity(bodyId, obtenerVelocidadDireccion());
+
+        b2Vec2 velActual = b2Body_GetLinearVelocity(bodyId);
+        float speedActual = std::sqrt(velActual.x * velActual.x + velActual.y * velActual.y);
+        if (speedActual < 0.5f)
+        {
+            elegirDireccionValidaDesdeCelda(mapa, filaActual, colActual);
+            b2Body_SetLinearVelocity(bodyId, obtenerVelocidadDireccion());
+        }
+    }
+
+    void draw(sf::RenderWindow& window)
+    {
+        if (!vivo || !b2Body_IsValid(bodyId))
+        {
+            return;
+        }
+
+        b2Vec2 pos = b2Body_GetPosition(bodyId);
+        float pixelX = pos.x * PIXELS_PER_METER;
+        float pixelY = pos.y * PIXELS_PER_METER;
+
+        if (texturaCargada)
+        {
+            sprite.setPosition(pixelX, pixelY);
+            window.draw(sprite);
+        }
+        else
+        {
+            sf::CircleShape fallback(TAMANO_TILE * 0.40f);
+            fallback.setOrigin(TAMANO_TILE * 0.40f, TAMANO_TILE * 0.40f);
+            fallback.setFillColor(sf::Color(180, 40, 80));
+            fallback.setOutlineColor(sf::Color::Black);
+            fallback.setOutlineThickness(2.0f);
+            fallback.setPosition(pixelX, pixelY);
+            window.draw(fallback);
+        }
+    }
+
+    void destruir(PhysicsSpace& physics)
+    {
+        (void)physics;
+        vivo = false;
+        if (b2Body_IsValid(bodyId))
+        {
+            b2DestroyBody(bodyId);
+        }
+        bodyId = b2_nullBodyId;
+    }
+
+    bool isVivo() const { return vivo; }
+    b2BodyId getBodyId() { return bodyId; }
+
+private:
+    b2Vec2 obtenerVelocidadDireccion() const
+    {
+        b2Vec2 velocity = {0.0f, 0.0f};
+
+        if (dirActual == ARRIBA)
+            velocity.y = -speed;
+        else if (dirActual == ABAJO)
+            velocity.y = speed;
+        else if (dirActual == DERECHA)
+            velocity.x = speed;
+        else if (dirActual == IZQUIERDA)
+            velocity.x = -speed;
+
+        return velocity;
+    }
+
+    bool celdaLibre(Mapa& mapa, int fila, int columna) const
+    {
+        return mapa.obtenerTipoCelda(fila, columna) == Mapa::VACIO;
+    }
+
+    bool siguienteCeldaLibre(Mapa& mapa, int fila, int columna) const
+    {
+        int siguienteFila = fila;
+        int siguienteColumna = columna;
+
+        if (dirActual == ARRIBA)
+            siguienteFila--;
+        else if (dirActual == ABAJO)
+            siguienteFila++;
+        else if (dirActual == DERECHA)
+            siguienteColumna++;
+        else if (dirActual == IZQUIERDA)
+            siguienteColumna--;
+
+        return celdaLibre(mapa, siguienteFila, siguienteColumna);
+    }
+
+    void elegirDireccionValidaDesdeCelda(Mapa& mapa, int fila, int columna)
+    {
+        std::vector<Direccion> direccionesLibres;
+
+        if (celdaLibre(mapa, fila - 1, columna))
+            direccionesLibres.push_back(ARRIBA);
+        if (celdaLibre(mapa, fila + 1, columna))
+            direccionesLibres.push_back(ABAJO);
+        if (celdaLibre(mapa, fila, columna + 1))
+            direccionesLibres.push_back(DERECHA);
+        if (celdaLibre(mapa, fila, columna - 1))
+            direccionesLibres.push_back(IZQUIERDA);
+
+        if (!direccionesLibres.empty())
+        {
+            dirActual = direccionesLibres[rand() % direccionesLibres.size()];
+        }
+    }
+
+    b2BodyId bodyId;
+    sf::Sprite sprite;
+    sf::Texture textura;
+    Direccion dirActual;
+    float speed;
+    bool vivo;
+    bool texturaCargada;
+};
 
 // ============== BOSS (FASE 6) ==============
 class Boss
@@ -2759,6 +3147,21 @@ int main()
             );
         }
     }
+    sf::Texture texturaGameOver;
+    sf::Sprite spriteGameOver;
+    bool texturaGameOverCargada = texturaGameOver.loadFromFile("assets/images/Game_over.png");
+    if (texturaGameOverCargada)
+    {
+        spriteGameOver.setTexture(texturaGameOver, true);
+        sf::Vector2u size = texturaGameOver.getSize();
+        if (size.x > 0 && size.y > 0)
+        {
+            spriteGameOver.setScale(
+                960.0f / static_cast<float>(size.x),
+                832.0f / static_cast<float>(size.y)
+            );
+        }
+    }
 
     std::array<sf::Texture, 4> texturasMarcosPersonajes;
     std::array<bool, 4> marcosPersonajesCargados = {false, false, false, false};
@@ -3128,6 +3531,68 @@ int main()
                (estadoActual == JUGANDO_ARCADE && gestorArcade.esCooperativo());
     };
 
+    auto soltarItemsArcade = [&](const std::vector<int>& tipos, int filaCentro, int columnaCentro)
+    {
+        if (tipos.empty())
+        {
+            return;
+        }
+
+        const std::vector<sf::Vector2i> offsets = {
+            {0, 0}, {-1, 0}, {1, 0}, {0, -1}, {0, 1},
+            {-1, -1}, {-1, 1}, {1, -1}, {1, 1}
+        };
+
+        std::size_t offsetIndex = 0;
+        for (int tipo : tipos)
+        {
+            bool colocado = false;
+            for (std::size_t intentos = 0; intentos < offsets.size(); intentos++)
+            {
+                const sf::Vector2i& offset = offsets[(offsetIndex + intentos) % offsets.size()];
+                int fila = filaCentro + offset.x;
+                int columna = columnaCentro + offset.y;
+
+                if (fila <= 0 || fila >= 12 || columna <= 0 || columna >= 14)
+                {
+                    continue;
+                }
+
+                if (mapa.obtenerTipoCelda(fila, columna) == Mapa::VACIO &&
+                    !celdaTieneItemActivo(listaItems, fila, columna))
+                {
+                    listaItems.emplace_back(fila, columna, tipo, true);
+                    offsetIndex = (offsetIndex + intentos + 1) % offsets.size();
+                    colocado = true;
+                    break;
+                }
+            }
+
+            if (!colocado)
+            {
+                std::cout << "Aviso: no hubo celda libre para soltar item arcade" << std::endl;
+            }
+        }
+    };
+
+    auto aplicarDanoArcade = [&](Knight& jugador)
+    {
+        if (!jugador.estaActivo())
+        {
+            return false;
+        }
+
+        sf::Vector2i celdaMuerte = obtenerCeldaBody(jugador.getBodyId());
+        std::vector<int> itemsParaSoltar = jugador.obtenerItemsParaSoltar();
+        bool recibioDano = jugador.recibirDanoArcade(physics);
+        if (recibioDano)
+        {
+            soltarItemsArcade(itemsParaSoltar, celdaMuerte.x, celdaMuerte.y);
+        }
+
+        return recibioDano;
+    };
+
     while (window.isOpen())
     {
         sf::Event event;
@@ -3285,8 +3750,12 @@ int main()
                 {
                     volverAlMenuPrincipal();
                 }
+                if (event.key.code == sf::Keyboard::Return && estadoActual == GAME_OVER)
+                {
+                    volverAlMenuPrincipal();
+                }
                 // Reiniciar con Enter si es GAME_OVER o VICTORIA (FASE 5)
-                if (event.key.code == sf::Keyboard::Return && (estadoActual == GAME_OVER || estadoActual == VICTORIA))
+                if (event.key.code == sf::Keyboard::Return && estadoActual == VICTORIA)
                 {
                     estadoActual = JUGANDO;
                     nivelActual = 1;
@@ -3429,6 +3898,34 @@ int main()
                 {
                     window.draw(textoVictoria);
                 }
+                window.draw(textoVolverMenu);
+            }
+
+            window.display();
+            continue;
+        }
+
+        if (estadoActual == GAME_OVER)
+        {
+            window.clear(sf::Color(8, 8, 12));
+            if (texturaGameOverCargada)
+            {
+                window.draw(spriteGameOver);
+            }
+
+            if (fuenteCargada)
+            {
+                if (!texturaGameOverCargada)
+                {
+                    window.draw(textoGameOver);
+                }
+
+                textoVolverMenu.setString("Presiona ENTER para volver al menu");
+                sf::FloatRect volverBounds = textoVolverMenu.getLocalBounds();
+                textoVolverMenu.setPosition(
+                    480.0f - volverBounds.left - volverBounds.width / 2.0f,
+                    792.0f
+                );
                 window.draw(textoVolverMenu);
             }
 
@@ -3673,7 +4170,11 @@ int main()
 
             if (distancia < 64.0f)
             {
-                if (knight.recibirDano(physics, modoActual == MULTIJUGADOR) && modoActual == MULTIJUGADOR)
+                if (estadoActual == JUGANDO_ARCADE)
+                {
+                    aplicarDanoArcade(knight);
+                }
+                else if (knight.recibirDano(physics, modoActual == MULTIJUGADOR) && modoActual == MULTIJUGADOR)
                 {
                     danoVersusP1 = true;
                 }
@@ -3689,7 +4190,11 @@ int main()
 
                 if (distanciaP2 < 64.0f)
                 {
-                    if (knight2.recibirDano(physics, modoActual == MULTIJUGADOR) && modoActual == MULTIJUGADOR)
+                    if (estadoActual == JUGANDO_ARCADE)
+                    {
+                        aplicarDanoArcade(knight2);
+                    }
+                    else if (knight2.recibirDano(physics, modoActual == MULTIJUGADOR) && modoActual == MULTIJUGADOR)
                     {
                         danoVersusP2 = true;
                     }
@@ -3706,7 +4211,8 @@ int main()
             {
                 estadoActual = VICTORIA_ARCADE;
             }
-            else if (knight.getVidas() <= 0 && (!gestorArcade.esCooperativo() || knight2.getVidas() <= 0))
+            else if ((!knight.estaActivo() || knight.getVidas() <= 0) &&
+                     (!gestorArcade.esCooperativo() || !knight2.estaActivo() || knight2.getVidas() <= 0))
             {
                 estadoActual = GAME_OVER;
                 std::cout << "GAME OVER ARCADE - Presiona ENTER para reiniciar" << std::endl;
@@ -3881,7 +4387,11 @@ int main()
 
                     if (fireDamageRect.intersects(knightDamageRect))
                     {
-                        if (knight.recibirDano(physics, modoActual == MULTIJUGADOR) && modoActual == MULTIJUGADOR)
+                        if (estadoActual == JUGANDO_ARCADE)
+                        {
+                            aplicarDanoArcade(knight);
+                        }
+                        else if (knight.recibirDano(physics, modoActual == MULTIJUGADOR) && modoActual == MULTIJUGADOR)
                         {
                             danoVersusP1 = true;
                         }
@@ -3903,7 +4413,11 @@ int main()
 
                         if (fireDamageRect.intersects(knight2DamageRect))
                         {
-                            if (knight2.recibirDano(physics, true))
+                            if (estadoActual == JUGANDO_ARCADE)
+                            {
+                                aplicarDanoArcade(knight2);
+                            }
+                            else if (knight2.recibirDano(physics, true))
                             {
                                 danoVersusP2 = true;
                             }
@@ -3949,9 +4463,25 @@ int main()
 
                 if (filaEnemigo == filaKnight && colEnemigo == colKnight)
                 {
-                    if (knight.recibirDano(physics, modoActual == MULTIJUGADOR) && modoActual == MULTIJUGADOR)
+                    if (estadoActual == JUGANDO_ARCADE)
+                    {
+                        aplicarDanoArcade(knight);
+                    }
+                    else if (knight.recibirDano(physics, modoActual == MULTIJUGADOR) && modoActual == MULTIJUGADOR)
                     {
                         danoVersusP1 = true;
+                    }
+                }
+
+                if (segundoJugadorActivo() && filaEnemigo == filaKnight2 && colEnemigo == colKnight2)
+                {
+                    if (estadoActual == JUGANDO_ARCADE)
+                    {
+                        aplicarDanoArcade(knight2);
+                    }
+                    else if (knight2.recibirDano(physics, modoActual == MULTIJUGADOR) && modoActual == MULTIJUGADOR)
+                    {
+                        danoVersusP2 = true;
                     }
                 }
             }
