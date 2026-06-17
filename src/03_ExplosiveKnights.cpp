@@ -76,6 +76,7 @@ const int PROBABILIDAD_ITEM_DESTRUCTIBLE = 70;
 const int MAX_CORAZONES_POR_MAPA = 1;
 const int PROBABILIDAD_CORAZON = 8;
 const float DURACION_ITEM_TEMPORAL = 10.0f;
+const float DURACION_ITEM_VERSUS = 15.0f;
 const float DURACION_ESCUDO_ITEM = 15.0f;
 const float TIEMPO_RESPAWN_ITEM = 20.0f;
 const float INCREMENTO_VELOCIDAD_VERSUS = 1.0f;
@@ -1313,9 +1314,11 @@ public:
           speedOriginal(6.5f), vidas(3), tiempoInvulnerable(0.0f),
           tiempoBombaExtra(0.0f), tiempoEscudo(0.0f), tiempoFantasma(0.0f),
           tiempoVelocidad(0.0f), tiempoPatear(0.0f), tiempoFlama(0.0f),
+          timerFlama(0.0f), timerVelocidad(0.0f), timerEscudo(0.0f),
+          timerFantasma(0.0f), timerBota(0.0f),
           bombasExtraRonda(0), velocidadExtraRonda(0.0f),
           fantasmaActivo(false), puedePatear(false), patearPermanente(false),
-          ignorandoDestructibles(false), activo(true),
+          ignorandoDestructibles(false), saliendoDeBloque(false), activo(true),
           idJugador(idJugador), rutaTexturaBomba("assets/images/Bomba_Verde.png")
     {
         // Crear cuerpo dinámico en Box2D v3.0
@@ -1420,7 +1423,7 @@ public:
         }
     }
 
-    void update(float deltaTime)
+    void update(float deltaTime, bool modoVersus = false, const Mapa* mapa = nullptr)
     {
         if (!activo)
         {
@@ -1436,31 +1439,58 @@ public:
             }
         }
 
-        actualizarTemporizador(tiempoEscudo, deltaTime);
-        actualizarTemporizador(tiempoBombaExtra, deltaTime);
-        actualizarTemporizador(tiempoVelocidad, deltaTime);
-        actualizarTemporizador(tiempoFantasma, deltaTime);
-        actualizarTemporizador(tiempoPatear, deltaTime);
-        actualizarTemporizador(tiempoFlama, deltaTime);
-
-        maxBombas = 1 + bombasExtraRonda;
-        if (bombasExtraRonda == 0 && tiempoBombaExtra > 0.0f)
+        if (modoVersus)
         {
-            maxBombas = 2;
-        }
+            bool fantasmaActivoAntes = timerFantasma > 0.0f;
 
-        speed = speedOriginal + velocidadExtraRonda;
-        if (velocidadExtraRonda <= 0.0f && tiempoVelocidad > 0.0f)
-        {
-            speed = speedOriginal * 1.5f;
-        }
+            actualizarTemporizador(timerEscudo, deltaTime);
+            actualizarTemporizador(timerVelocidad, deltaTime);
+            actualizarTemporizador(timerFantasma, deltaTime);
+            actualizarTemporizador(timerBota, deltaTime);
+            actualizarTemporizador(timerFlama, deltaTime);
 
-        puedePatear = patearPermanente || tiempoPatear > 0.0f;
-        if (rangoFuego <= 1 && tiempoFlama > 0.0f)
-        {
-            rangoFuego = 2;
+            if (timerFantasma <= 0.0f && (fantasmaActivoAntes || saliendoDeBloque))
+            {
+                actualizarSalidaSeguraFantasma(mapa);
+            }
+            else if (timerFantasma > 0.0f)
+            {
+                saliendoDeBloque = false;
+            }
+
+            maxBombas = 1 + bombasExtraRonda;
+            speed = speedOriginal + (timerVelocidad > 0.0f ? INCREMENTO_VELOCIDAD_VERSUS : 0.0f);
+            puedePatear = timerBota > 0.0f;
+            setIgnorarDestructibles(timerFantasma > 0.0f || saliendoDeBloque);
         }
-        setIgnorarDestructibles(fantasmaActivo || tiempoFantasma > 0.0f);
+        else
+        {
+            actualizarTemporizador(tiempoEscudo, deltaTime);
+            actualizarTemporizador(tiempoBombaExtra, deltaTime);
+            actualizarTemporizador(tiempoVelocidad, deltaTime);
+            actualizarTemporizador(tiempoFantasma, deltaTime);
+            actualizarTemporizador(tiempoPatear, deltaTime);
+            actualizarTemporizador(tiempoFlama, deltaTime);
+
+            maxBombas = 1 + bombasExtraRonda;
+            if (bombasExtraRonda == 0 && tiempoBombaExtra > 0.0f)
+            {
+                maxBombas = 2;
+            }
+
+            speed = speedOriginal + velocidadExtraRonda;
+            if (velocidadExtraRonda <= 0.0f && tiempoVelocidad > 0.0f)
+            {
+                speed = speedOriginal * 1.5f;
+            }
+
+            puedePatear = patearPermanente || tiempoPatear > 0.0f;
+            if (rangoFuego <= 1 && tiempoFlama > 0.0f)
+            {
+                rangoFuego = 2;
+            }
+            setIgnorarDestructibles(fantasmaActivo || tiempoFantasma > 0.0f);
+        }
 
         personaje.update();
     }
@@ -1530,14 +1560,14 @@ public:
             return;
         }
 
-        bombas.emplace_back(fila, columna, physics, rangoFuego, propietario, rutaTexturaBomba);
+        bombas.emplace_back(fila, columna, physics, getRangoFuego(), propietario, rutaTexturaBomba);
     }
 
-    void recolectarItem(int tipo, bool modoVersus = false)
+    void recolectarItem(int tipo, bool modoVersus = false, bool modoArcade = false)
     {
         if (tipo == ITEM_BOMBA_EXTRA)
         {
-            if (modoVersus)
+            if (modoVersus || modoArcade)
             {
                 bombasExtraRonda++;
                 maxBombas = 1 + bombasExtraRonda;
@@ -1551,12 +1581,24 @@ public:
         }
         else if (tipo == ITEM_ESCUDO)
         {
-            tiempoEscudo = DURACION_ESCUDO_ITEM;
+            if (modoVersus)
+            {
+                timerEscudo = DURACION_ITEM_VERSUS;
+            }
+            else
+            {
+                tiempoEscudo = DURACION_ESCUDO_ITEM;
+            }
         }
         else if (tipo == ITEM_FANTASMA)
         {
             // Bomba Extra: aumentar máximo de bombas
             if (modoVersus)
+            {
+                timerFantasma = DURACION_ITEM_VERSUS;
+                saliendoDeBloque = false;
+            }
+            else if (modoArcade)
             {
                 fantasmaActivo = true;
                 tiempoFantasma = 0.0f;
@@ -1570,6 +1612,11 @@ public:
         else if (tipo == ITEM_VELOCIDAD)
         {
             if (modoVersus)
+            {
+                timerVelocidad = DURACION_ITEM_VERSUS;
+                speed = speedOriginal + INCREMENTO_VELOCIDAD_VERSUS;
+            }
+            else if (modoArcade)
             {
                 velocidadExtraRonda += INCREMENTO_VELOCIDAD_VERSUS;
                 speed = speedOriginal + velocidadExtraRonda;
@@ -1589,6 +1636,11 @@ public:
         {
             if (modoVersus)
             {
+                timerBota = DURACION_ITEM_VERSUS;
+                puedePatear = true;
+            }
+            else if (modoArcade)
+            {
                 patearPermanente = true;
                 tiempoPatear = 0.0f;
                 puedePatear = true;
@@ -1602,6 +1654,10 @@ public:
         else if (tipo == ITEM_FLAMA)
         {
             if (modoVersus)
+            {
+                timerFlama = DURACION_ITEM_VERSUS;
+            }
+            else if (modoArcade)
             {
                 rangoFuego++;
                 tiempoFlama = 0.0f;
@@ -1627,7 +1683,12 @@ public:
             return false;
         }
 
-        if (tiempoEscudo > 0.0f)
+        if (conservarMejoras && timerEscudo > 0.0f)
+        {
+            return false;
+        }
+
+        if (!conservarMejoras && tiempoEscudo > 0.0f)
         {
             tiempoEscudo = 0.0f;
             return false;
@@ -1772,14 +1833,14 @@ public:
     }
 
     b2BodyId getBodyId() { return bodyId; }
-    int getRangoFuego() const { return rangoFuego; }
+    int getRangoFuego() const { return rangoFuego + (timerFlama > 0.0f ? 1 : 0); }
     int getMaxBombas() const { return maxBombas; }
     int getVidas() const { return vidas; }
     void setVidas(int nuevasVidas) { vidas = nuevasVidas; }
     bool estaActivo() const { return activo; }
     Direccion getDireccionActual() const { return direccionActual; }
-    bool puedePatearBombas() const { return puedePatear; }
-    bool tieneFantasma() const { return fantasmaActivo || tiempoFantasma > 0.0f; }
+    bool puedePatearBombas() const { return puedePatear || timerBota > 0.0f; }
+    bool tieneFantasma() const { return fantasmaActivo || tiempoFantasma > 0.0f || timerFantasma > 0.0f; }
     std::vector<int> obtenerItemsParaSoltar() const
     {
         std::vector<int> items;
@@ -1826,15 +1887,15 @@ public:
         if (tipo == ITEM_BOMBA_EXTRA)
             return tiempoBombaExtra;
         if (tipo == ITEM_ESCUDO)
-            return tiempoEscudo;
+            return timerEscudo > 0.0f ? timerEscudo : tiempoEscudo;
         if (tipo == ITEM_FANTASMA)
-            return tiempoFantasma;
+            return timerFantasma > 0.0f ? timerFantasma : tiempoFantasma;
         if (tipo == ITEM_VELOCIDAD)
-            return tiempoVelocidad;
+            return timerVelocidad > 0.0f ? timerVelocidad : tiempoVelocidad;
         if (tipo == ITEM_PATEAR)
-            return tiempoPatear;
+            return timerBota > 0.0f ? timerBota : tiempoPatear;
         if (tipo == ITEM_FLAMA)
-            return tiempoFlama;
+            return timerFlama > 0.0f ? timerFlama : tiempoFlama;
         return 0.0f;
     }
 
@@ -1859,11 +1920,17 @@ private:
         tiempoVelocidad = 0.0f;
         tiempoPatear = 0.0f;
         tiempoFlama = 0.0f;
+        timerFlama = 0.0f;
+        timerVelocidad = 0.0f;
+        timerEscudo = 0.0f;
+        timerFantasma = 0.0f;
+        timerBota = 0.0f;
         bombasExtraRonda = 0;
         velocidadExtraRonda = 0.0f;
         fantasmaActivo = false;
         puedePatear = false;
         patearPermanente = false;
+        saliendoDeBloque = false;
         maxBombas = 1;
         speed = speedOriginal;
         setIgnorarDestructibles(false);
@@ -1907,6 +1974,24 @@ private:
         ignorandoDestructibles = activo;
     }
 
+    void actualizarSalidaSeguraFantasma(const Mapa* mapa)
+    {
+        if (mapa == nullptr || !b2Body_IsValid(bodyId))
+        {
+            saliendoDeBloque = false;
+            return;
+        }
+
+        b2Vec2 pos = b2Body_GetPosition(bodyId);
+        int columna = static_cast<int>((pos.x * PIXELS_PER_METER) / TAMANO_TILE);
+        int fila = static_cast<int>((pos.y * PIXELS_PER_METER) / TAMANO_TILE);
+        int tipoCelda = mapa->obtenerTipoCelda(fila, columna);
+
+        saliendoDeBloque =
+            tipoCelda == Mapa::DESTRUCTIBLE ||
+            tipoCelda == Mapa::DESTRUYENDOSE;
+    }
+
     Personaje personaje;
     b2BodyId bodyId;
     PhysicsSpace& physicsSpace;
@@ -1924,12 +2009,18 @@ private:
     float tiempoVelocidad;
     float tiempoPatear;
     float tiempoFlama;
+    float timerFlama;
+    float timerVelocidad;
+    float timerEscudo;
+    float timerFantasma;
+    float timerBota;
     int bombasExtraRonda;
     float velocidadExtraRonda;
     bool fantasmaActivo;
     bool puedePatear;
     bool patearPermanente;
     bool ignorandoDestructibles;
+    bool saliendoDeBloque;
     bool activo;
     int idJugador;
     std::string rutaTexturaBomba;
@@ -3034,7 +3125,7 @@ float obtenerProgresoItemHUD(int tipo, float tiempo)
         return 0.0f;
     }
 
-    float duracion = tipo == ITEM_ESCUDO ? DURACION_ESCUDO_ITEM : DURACION_ITEM_TEMPORAL;
+    float duracion = DURACION_ITEM_VERSUS;
     return std::min(1.0f, tiempo / duracion);
 }
 
@@ -3102,13 +3193,12 @@ void dibujarCorazonesVidaHUD(sf::RenderWindow& window, int vidas, float x, float
 
 void dibujarBarrasItemsHUD(sf::RenderWindow& window, const Knight& knight, float x, float y)
 {
-    const int tiposTemporales[6] = {
-        ITEM_BOMBA_EXTRA,
+    const int tiposTemporales[5] = {
+        ITEM_FLAMA,
+        ITEM_VELOCIDAD,
         ITEM_ESCUDO,
         ITEM_FANTASMA,
-        ITEM_VELOCIDAD,
-        ITEM_PATEAR,
-        ITEM_FLAMA
+        ITEM_PATEAR
     };
 
     float offsetY = 0.0f;
@@ -3154,7 +3244,7 @@ void dibujarBarrasItemsHUD(sf::RenderWindow& window, const Knight& knight, float
 void dibujarPanelJugadorHUD(sf::RenderWindow& window, const Knight& knight, int personaje,
                             sf::Texture* texturaMarco, int rondasGanadas,
                             const std::string& etiqueta, sf::Font* fuente, float x, float y,
-                            bool barrasALaIzquierda = false)
+                            bool barrasALaIzquierda = false, bool mostrarBarrasItems = false)
 {
     sf::RectangleShape sombra(sf::Vector2f(76.0f, 76.0f));
     sombra.setPosition(x + 4.0f, y + 5.0f);
@@ -3211,8 +3301,11 @@ void dibujarPanelJugadorHUD(sf::RenderWindow& window, const Knight& knight, int 
         dibujarBombaDoradaHUD(window, x + 18.0f + i * 19.0f, y + 118.0f, 0.82f);
     }
 
-    float barrasX = barrasALaIzquierda ? x - 136.0f : x + 86.0f;
-    dibujarBarrasItemsHUD(window, knight, barrasX, y + 4.0f);
+    if (mostrarBarrasItems)
+    {
+        float barrasX = barrasALaIzquierda ? x - 136.0f : x + 86.0f;
+        dibujarBarrasItemsHUD(window, knight, barrasX, y + 4.0f);
+    }
 }
 
 void cargarNivel(int nivel, Mapa& mapa, Knight& knight, std::vector<Enemigo>& enemigos,
@@ -4525,10 +4618,10 @@ int main()
         }
 
         // UPDATE SPRITES
-        knight.update(timeStep);
+        knight.update(timeStep, modoActual == MULTIJUGADOR, &mapa);
         if (segundoJugadorActivo())
         {
-            knight2.update(timeStep);
+            knight2.update(timeStep, modoActual == MULTIJUGADOR, &mapa);
             intentarPatearBombas(knight, listaBombas);
             intentarPatearBombas(knight2, listaBombas);
         }
@@ -4908,7 +5001,11 @@ int main()
         {
             if (item.isActivo() && item.estaVisible() && item.getFila() == filaKnight && item.getColumna() == colKnight)
             {
-                knight.recolectarItem(item.getTipo(), modoActual == MULTIJUGADOR || estadoActual == JUGANDO_ARCADE);
+                knight.recolectarItem(
+                    item.getTipo(),
+                    modoActual == MULTIJUGADOR,
+                    estadoActual == JUGANDO_ARCADE
+                );
                 item.desactivar();
                 if (modoActual != MULTIJUGADOR)
                 {
@@ -4921,7 +5018,11 @@ int main()
                      item.getFila() == filaKnight2 &&
                      item.getColumna() == colKnight2)
             {
-                knight2.recolectarItem(item.getTipo(), modoActual == MULTIJUGADOR || estadoActual == JUGANDO_ARCADE);
+                knight2.recolectarItem(
+                    item.getTipo(),
+                    modoActual == MULTIJUGADOR,
+                    estadoActual == JUGANDO_ARCADE
+                );
                 item.desactivar();
                 if (modoActual != MULTIJUGADOR)
                 {
@@ -5166,7 +5267,9 @@ int main()
                 "P1",
                 &fuente,
                 10.0f,
-                8.0f
+                8.0f,
+                false,
+                modoActual == MULTIJUGADOR
             );
 
             if (segundoJugadorActivo())
@@ -5184,7 +5287,8 @@ int main()
                     &fuente,
                     874.0f,
                     8.0f,
-                    true
+                    true,
+                    modoActual == MULTIJUGADOR
                 );
             }
 
