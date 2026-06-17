@@ -2774,17 +2774,43 @@ int main()
     // SISTEMA DE AUDIO (FASE 1)
     sf::Music musicaFondo;
     // Cargar música de fondo (archivo ficticio - modificar cuando exista el archivo real)
-    if (!musicaFondo.openFromFile("assets/audio/stage1.ogg"))
+    if (!musicaFondo.openFromFile("assets/audio/menu_medieval_bomber.wav"))
     {
-        std::cout << "Aviso: No se pudo cargar assets/audio/stage1.ogg" << std::endl;
+        std::cout << "Aviso: No se pudo cargar assets/audio/menu_medieval_bomber.wav" << std::endl;
     }
     else
     {
         musicaFondo.setLoop(true);
+        musicaFondo.setVolume(48.0f);
         musicaFondo.play();
     }
 
     // INTERFAZ GRÁFICA (FASE 5)
+    bool musicaPartidaActiva = false;
+    auto cambiarMusicaFondo = [&](bool usarPartida)
+    {
+        if (usarPartida == musicaPartidaActiva)
+        {
+            return;
+        }
+
+        const char* rutaMusica = usarPartida
+            ? "assets/audio/partida_medieval_bomber.wav"
+            : "assets/audio/menu_medieval_bomber.wav";
+
+        musicaFondo.stop();
+        if (!musicaFondo.openFromFile(rutaMusica))
+        {
+            std::cout << "Aviso: No se pudo cargar " << rutaMusica << std::endl;
+            return;
+        }
+
+        musicaPartidaActiva = usarPartida;
+        musicaFondo.setLoop(true);
+        musicaFondo.setVolume(usarPartida ? 52.0f : 48.0f);
+        musicaFondo.play();
+    };
+
     sf::Font fuente;
     bool fuenteCargada = false;
     
@@ -3347,6 +3373,12 @@ int main()
                 }
             }
         }
+
+        cambiarMusicaFondo(
+            estadoActual == JUGANDO ||
+            estadoActual == JUGANDO_ARCADE ||
+            estadoActual == TRANSICION_NIVEL
+        );
 
         if (estadoActual == MENU_PRINCIPAL)
         {
