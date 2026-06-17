@@ -1317,7 +1317,8 @@ public:
           timerFlama(0.0f), timerVelocidad(0.0f), timerEscudo(0.0f),
           timerFantasma(0.0f), timerBota(0.0f),
           bombasExtraRonda(0), velocidadExtraRonda(0.0f),
-          escudoPermanente(false), fantasmaActivo(false), puedePatear(false), patearPermanente(false),
+          escudoPermanente(false), fantasmaActivo(false), puedePatear(false),
+          patearPermanente(false), tieneBotaArcade(false),
           ignorandoDestructibles(false), saliendoDeBloque(false), activo(true),
           idJugador(idJugador), rutaTexturaBomba("assets/images/Bomba_Verde.png")
     {
@@ -1646,6 +1647,7 @@ public:
             }
             else if (modoArcade)
             {
+                tieneBotaArcade = true;
                 patearPermanente = true;
                 tiempoPatear = 0.0f;
                 puedePatear = true;
@@ -1849,7 +1851,10 @@ public:
     void setVidas(int nuevasVidas) { vidas = nuevasVidas; }
     bool estaActivo() const { return activo; }
     Direccion getDireccionActual() const { return direccionActual; }
-    bool puedePatearBombas() const { return puedePatear || timerBota > 0.0f; }
+    bool puedePatearBombas() const
+    {
+        return timerBota > 0.0f || tieneBotaArcade || patearPermanente || tiempoPatear > 0.0f;
+    }
     bool tieneFantasma() const { return fantasmaActivo || tiempoFantasma > 0.0f || timerFantasma > 0.0f; }
     std::vector<int> obtenerItemsParaSoltar() const
     {
@@ -1889,7 +1894,7 @@ public:
         {
             items.push_back(ITEM_FANTASMA);
         }
-        if (patearPermanente || tiempoPatear > 0.0f)
+        if (tieneBotaArcade || patearPermanente || tiempoPatear > 0.0f)
         {
             items.push_back(ITEM_PATEAR);
         }
@@ -1945,6 +1950,7 @@ private:
         fantasmaActivo = false;
         puedePatear = false;
         patearPermanente = false;
+        tieneBotaArcade = false;
         saliendoDeBloque = false;
         maxBombas = 1;
         speed = speedOriginal;
@@ -2035,6 +2041,7 @@ private:
     bool fantasmaActivo;
     bool puedePatear;
     bool patearPermanente;
+    bool tieneBotaArcade;
     bool ignorandoDestructibles;
     bool saliendoDeBloque;
     bool activo;
@@ -3141,8 +3148,8 @@ int seleccionarTipoItemArcade(int nivelActual, bool& vidaSpawneadaNivel)
             ITEM_BOMBA_EXTRA,
             ITEM_FLAMA,
             ITEM_VELOCIDAD,
-            ITEM_ESCUDO,
-            ITEM_PATEAR
+            ITEM_PATEAR,
+            ITEM_ESCUDO
         };
         return itemsNivel2[rand() % 5];
     }
@@ -3153,8 +3160,8 @@ int seleccionarTipoItemArcade(int nivelActual, bool& vidaSpawneadaNivel)
             ITEM_BOMBA_EXTRA,
             ITEM_FLAMA,
             ITEM_VELOCIDAD,
-            ITEM_ESCUDO,
             ITEM_PATEAR,
+            ITEM_ESCUDO,
             ITEM_FANTASMA
         };
         return itemsNivel3[rand() % 6];
@@ -3164,9 +3171,9 @@ int seleccionarTipoItemArcade(int nivelActual, bool& vidaSpawneadaNivel)
         ITEM_BOMBA_EXTRA,
         ITEM_FLAMA,
         ITEM_VELOCIDAD,
+        ITEM_PATEAR,
         ITEM_ESCUDO,
-        ITEM_FANTASMA,
-        ITEM_PATEAR
+        ITEM_FANTASMA
     };
     return itemsNivel4[rand() % 6];
 }
