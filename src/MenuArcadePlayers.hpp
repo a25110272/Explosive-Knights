@@ -16,17 +16,13 @@ public:
     void limpiarConfirmacion();
 
 private:
-    void actualizarTextos();
-    void centrarTexto(sf::Text& texto, float x, float y);
+    void actualizarSelector();
 
-    sf::Font fuente;
-    sf::Text titulo;
-    sf::Text opcionUno;
-    sf::Text opcionDos;
-    sf::Text instruccion;
-    sf::RectangleShape fondo;
+    sf::Texture texturaFondo;
+    sf::Sprite spriteFondo;
+    sf::RectangleShape fondoFallback;
     sf::RectangleShape selector;
-    bool fuenteCargada;
+    bool fondoCargado;
     bool confirmarSeleccion;
     int opcionActual;
 };

@@ -2,60 +2,49 @@
 
 #include <iostream>
 
+namespace
+{
+const sf::Vector2f MENU_ARCADE_SELECTOR_SIZE(240.0f, 60.0f);
+const float MENU_ARCADE_SELECTOR_Y = 430.0f;
+const float MENU_ARCADE_SELECTOR_1P_X = 330.0f;
+const float MENU_ARCADE_SELECTOR_2P_X = 630.0f;
+}
+
 MenuArcadePlayers::MenuArcadePlayers()
-    : fuenteCargada(false), confirmarSeleccion(false), opcionActual(0)
+    : fondoCargado(false), confirmarSeleccion(false), opcionActual(0)
 {
 }
 
 bool MenuArcadePlayers::init()
 {
-    fuenteCargada = fuente.loadFromFile("C:\\Windows\\Fonts\\arial.ttf");
-    if (!fuenteCargada)
+    fondoCargado = texturaFondo.loadFromFile("assets/images/Players_arcade.png");
+    if (!fondoCargado)
     {
-        std::cout << "Aviso: No se pudo cargar fuente para MenuArcadePlayers" << std::endl;
+        std::cout << "Aviso: No se pudo cargar assets/images/Players_arcade.png" << std::endl;
+    }
+    else
+    {
+        spriteFondo.setTexture(texturaFondo, true);
+        sf::Vector2u size = texturaFondo.getSize();
+        if (size.x > 0 && size.y > 0)
+        {
+            spriteFondo.setScale(
+                960.0f / static_cast<float>(size.x),
+                832.0f / static_cast<float>(size.y)
+            );
+        }
     }
 
-    fondo.setSize(sf::Vector2f(960.0f, 832.0f));
-    fondo.setFillColor(sf::Color(18, 20, 28));
+    fondoFallback.setSize(sf::Vector2f(960.0f, 832.0f));
+    fondoFallback.setFillColor(sf::Color(18, 20, 28));
 
-    selector.setSize(sf::Vector2f(320.0f, 54.0f));
-    selector.setOrigin(160.0f, 27.0f);
-    selector.setFillColor(sf::Color(255, 220, 40, 55));
+    selector.setSize(MENU_ARCADE_SELECTOR_SIZE);
+    selector.setOrigin(MENU_ARCADE_SELECTOR_SIZE.x / 2.0f, MENU_ARCADE_SELECTOR_SIZE.y / 2.0f);
+    selector.setFillColor(sf::Color::Transparent);
     selector.setOutlineColor(sf::Color::Yellow);
-    selector.setOutlineThickness(3.0f);
+    selector.setOutlineThickness(5.0f);
 
-    if (fuenteCargada)
-    {
-        titulo.setFont(fuente);
-        titulo.setCharacterSize(52);
-        titulo.setFillColor(sf::Color::Yellow);
-        titulo.setOutlineColor(sf::Color::Black);
-        titulo.setOutlineThickness(4.0f);
-        titulo.setString("MODO ARCADE");
-
-        opcionUno.setFont(fuente);
-        opcionUno.setCharacterSize(34);
-        opcionUno.setFillColor(sf::Color::White);
-        opcionUno.setOutlineColor(sf::Color::Black);
-        opcionUno.setOutlineThickness(3.0f);
-        opcionUno.setString("1 JUGADOR");
-
-        opcionDos.setFont(fuente);
-        opcionDos.setCharacterSize(34);
-        opcionDos.setFillColor(sf::Color::White);
-        opcionDos.setOutlineColor(sf::Color::Black);
-        opcionDos.setOutlineThickness(3.0f);
-        opcionDos.setString("2 JUGADORES");
-
-        instruccion.setFont(fuente);
-        instruccion.setCharacterSize(22);
-        instruccion.setFillColor(sf::Color::White);
-        instruccion.setOutlineColor(sf::Color::Black);
-        instruccion.setOutlineThickness(2.0f);
-        instruccion.setString("Usa izquierda/derecha y ENTER");
-    }
-
-    actualizarTextos();
+    actualizarSelector();
     return true;
 }
 
@@ -69,7 +58,7 @@ void MenuArcadePlayers::handleInput(sf::Event& event)
     if (event.key.code == sf::Keyboard::Left || event.key.code == sf::Keyboard::Right)
     {
         opcionActual = 1 - opcionActual;
-        actualizarTextos();
+        actualizarSelector();
     }
     else if (event.key.code == sf::Keyboard::Return)
     {
@@ -79,16 +68,16 @@ void MenuArcadePlayers::handleInput(sf::Event& event)
 
 void MenuArcadePlayers::draw(sf::RenderWindow& window)
 {
-    window.draw(fondo);
-    window.draw(selector);
-
-    if (fuenteCargada)
+    if (fondoCargado)
     {
-        window.draw(titulo);
-        window.draw(opcionUno);
-        window.draw(opcionDos);
-        window.draw(instruccion);
+        window.draw(spriteFondo);
     }
+    else
+    {
+        window.draw(fondoFallback);
+    }
+
+    window.draw(selector);
 }
 
 bool MenuArcadePlayers::seleccionConfirmada() const
@@ -106,24 +95,11 @@ void MenuArcadePlayers::limpiarConfirmacion()
     confirmarSeleccion = false;
 }
 
-void MenuArcadePlayers::actualizarTextos()
+void MenuArcadePlayers::actualizarSelector()
 {
-    selector.setPosition(opcionActual == 0 ? 300.0f : 660.0f, 430.0f);
-
-    if (!fuenteCargada)
-    {
-        return;
-    }
-
-    centrarTexto(titulo, 480.0f, 220.0f);
-    centrarTexto(opcionUno, 300.0f, 410.0f);
-    centrarTexto(opcionDos, 660.0f, 410.0f);
-    centrarTexto(instruccion, 480.0f, 720.0f);
-}
-
-void MenuArcadePlayers::centrarTexto(sf::Text& texto, float x, float y)
-{
-    sf::FloatRect bounds = texto.getLocalBounds();
-    texto.setOrigin(bounds.left + bounds.width / 2.0f, bounds.top + bounds.height / 2.0f);
-    texto.setPosition(x, y);
+    selector.setPosition(
+        opcionActual == 0
+            ? sf::Vector2f(MENU_ARCADE_SELECTOR_1P_X, MENU_ARCADE_SELECTOR_Y)
+            : sf::Vector2f(MENU_ARCADE_SELECTOR_2P_X, MENU_ARCADE_SELECTOR_Y)
+    );
 }
