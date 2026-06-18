@@ -4,10 +4,10 @@
 
 namespace
 {
-const sf::Vector2f MENU_ARCADE_SELECTOR_SIZE(240.0f, 60.0f);
-const float MENU_ARCADE_SELECTOR_Y = 430.0f;
-const float MENU_ARCADE_SELECTOR_1P_X = 330.0f;
-const float MENU_ARCADE_SELECTOR_2P_X = 630.0f;
+const sf::Vector2f MENU_ARCADE_SELECTOR_SIZE(210.0f, 88.0f);
+const float MENU_ARCADE_SELECTOR_Y = 426.0f;
+const float MENU_ARCADE_SELECTOR_1P_X = 338.0f;
+const float MENU_ARCADE_SELECTOR_2P_X = 622.0f;
 }
 
 MenuArcadePlayers::MenuArcadePlayers()
