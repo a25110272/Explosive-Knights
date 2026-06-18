@@ -4222,7 +4222,7 @@ int main()
     bool texturaEmpateVersusCargada = false;
     sf::Texture texturaVictoriaArcade;
     sf::Sprite spriteVictoriaArcade;
-    bool texturaVictoriaArcadeCargada = texturaVictoriaArcade.loadFromFile("assets/images/CONGRATULATIONS.png");
+    bool texturaVictoriaArcadeCargada = texturaVictoriaArcade.loadFromFile("assets/images/Congratulations_arcade.png");
     if (texturaVictoriaArcadeCargada)
     {
         spriteVictoriaArcade.setTexture(texturaVictoriaArcade, true);
@@ -5038,32 +5038,10 @@ int main()
 
         if (estadoActual == VICTORIA_ARCADE)
         {
-            window.clear(sf::Color(10, 10, 16));
+            window.clear(sf::Color::Black);
             if (texturaVictoriaArcadeCargada)
             {
                 window.draw(spriteVictoriaArcade);
-            }
-
-            if (fuenteCargada)
-            {
-                textoVictoria.setString("CONGRATULATIONS");
-                sf::FloatRect victoriaBounds = textoVictoria.getLocalBounds();
-                textoVictoria.setPosition(
-                    480.0f - victoriaBounds.left - victoriaBounds.width / 2.0f,
-                    260.0f
-                );
-                textoVolverMenu.setString("Presiona ENTER para volver al menu");
-                sf::FloatRect volverBounds = textoVolverMenu.getLocalBounds();
-                textoVolverMenu.setPosition(
-                    480.0f - volverBounds.left - volverBounds.width / 2.0f,
-                    792.0f
-                );
-
-                if (!texturaVictoriaArcadeCargada)
-                {
-                    window.draw(textoVictoria);
-                }
-                window.draw(textoVolverMenu);
             }
 
             window.display();
